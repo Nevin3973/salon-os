@@ -1,0 +1,231 @@
+// AMARA Central Supply — multi-tenant schema
+// See C:\Users\NM\.claude\plans\vectorized-prancing-meteor.md for the design rationale.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  // In production (Neon/etc) DATABASE_URL is the pooled connection and
+  // directUrl is the direct (non-pooled) connection used for migrations.
+  directUrl = env("DIRECT_URL")
+}
+
+// ————————————————————————————————————————————————————————
+// Tenancy & identity
+// ————————————————————————————————————————————————————————
+
+model Org {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+
+  locations   Location[]
+  memberships Membership[]
+  products    Product[]
+  orders      Order[]
+  authCodes   AuthorizationCode[]
+  auditLog    AuditLogEntry[]
+  movements   StockMovement[]
+}
+
+enum LocationType {
+  BRANCH
+  WAREHOUSE
+}
+
+model Location {
+  id       String       @id @default(cuid())
+  orgId    String
+  org      Org          @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  type     LocationType
+  name     String
+  isActive Boolean      @default(true)
+
+  memberships Membership[]
+  orders      Order[]
+
+  @@index([orgId, type])
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  mustChangePassword Boolean @default(false)
+  createdAt    DateTime @default(now())
+
+  memberships Membership[]
+}
+
+enum Role {
+  PURCHASE_MANAGER
+  WAREHOUSE_MANAGER
+  SUPER_ADMIN
+}
+
+model Membership {
+  id         String    @id @default(cuid())
+  userId     String
+  orgId      String
+  role       Role
+  locationId String? // required for PM/WM, null for SUPER_ADMIN
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  org      Org       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  location Location? @relation(fields: [locationId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, orgId]) // v1: one role per org per user
+  @@index([orgId, role])
+}
+
+// ————————————————————————————————————————————————————————
+// Catalogue & stock
+// ————————————————————————————————————————————————————————
+
+model Product {
+  id       String  @id @default(cuid())
+  orgId    String
+  org      Org     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  sku      String
+  name     String
+  brand    String
+  category String
+  unit     String
+  stock    Int     @default(0)
+  minStock Int     @default(0)
+  active   Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  orderItems OrderItem[]
+  movements  StockMovement[]
+
+  @@unique([orgId, sku])
+  @@index([orgId, active, category])
+}
+
+model StockMovement {
+  id        String  @id @default(cuid())
+  orgId     String
+  org       Org     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  userId    String?
+
+  prevQty    Int
+  newQty     Int
+  action     String
+  refOrderId String?
+
+  createdAt DateTime @default(now())
+
+  @@index([orgId, createdAt])
+  @@index([orgId, productId])
+}
+
+// ————————————————————————————————————————————————————————
+// Orders
+// ————————————————————————————————————————————————————————
+
+enum OrderStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  PARTIALLY_FULFILLED
+  CANCELLED
+}
+
+model Order {
+  id             String      @id @default(cuid())
+  orgId          String
+  org            Org         @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  branchId       String
+  branch         Location    @relation(fields: [branchId], references: [id])
+  placedByUserId String
+  status         OrderStatus @default(PENDING)
+  authCodeId     String?
+  authCode       AuthorizationCode? @relation(fields: [authCodeId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items OrderItem[]
+
+  @@index([orgId, branchId, status])
+  @@index([orgId, status])
+}
+
+model OrderItem {
+  id           String  @id @default(cuid())
+  orderId      String
+  order        Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId    String
+  product      Product @relation(fields: [productId], references: [id])
+  requestedQty Int
+  deliveredQty Int     @default(0)
+  note         String?
+
+  outstandingReason String?
+  outstandingEta     DateTime?
+  outstandingRemark  String?
+
+  deliveries OrderItemDelivery[]
+
+  @@index([orderId])
+  @@index([productId])
+}
+
+model OrderItemDelivery {
+  id                 String    @id @default(cuid())
+  orderItemId        String
+  orderItem          OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  qty                Int
+  dispatchedByUserId String?
+  createdAt          DateTime  @default(now())
+
+  @@index([orderItemId])
+}
+
+// ————————————————————————————————————————————————————————
+// Authorization codes & audit
+// ————————————————————————————————————————————————————————
+
+model AuthorizationCode {
+  id              String    @id @default(cuid())
+  orgId           String
+  org             Org       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  locationId      String? // null = org-wide code; set = branch-scoped
+  codeHash        String
+  label           String? // e.g. last 4 chars for display, "ROSE-****"
+  isActive        Boolean   @default(true)
+  createdByUserId String
+  createdAt       DateTime  @default(now())
+  rotatedAt       DateTime?
+
+  orders Order[]
+
+  @@index([orgId, isActive])
+}
+
+model AuditLogEntry {
+  id         String   @id @default(cuid())
+  orgId      String
+  org        Org      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  userId     String?
+  userName   String? // denormalized for display even if user is later removed
+  action     String
+  entityType String?
+  entityId   String?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  @@index([orgId, createdAt])
+}
