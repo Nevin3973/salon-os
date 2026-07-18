@@ -103,6 +103,12 @@ export function StorefrontHeader({
               <div className="text-xs text-faint">{orgName}{branchName ? ` · ${branchName}` : ""}</div>
             </div>
             <div className="h-px bg-line my-1" />
+            <Link href="/purchase-manager/account" className="block px-3 py-2 text-sm text-muted hover:text-ink hover:bg-velvet-soft rounded-lg">
+              Your Account
+            </Link>
+            <Link href="/purchase-manager/account/addresses" className="block px-3 py-2 text-sm text-muted hover:text-ink hover:bg-velvet-soft rounded-lg">
+              Addresses
+            </Link>
             <Link href="/purchase-manager/orders" className="block px-3 py-2 text-sm text-muted hover:text-ink hover:bg-velvet-soft rounded-lg">
               My Orders
             </Link>

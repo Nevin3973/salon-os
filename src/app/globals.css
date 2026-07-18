@@ -96,6 +96,70 @@
 }
 
 /* ═══════════════════════════════════════════════════════════
+   SURFACE THEMES
+   One brand, three products: each route-group layout wraps its
+   pages in a theme class that remaps the token families below.
+   Components keep using velvet/* utilities and inherit the
+   surface identity automatically.
+   ═══════════════════════════════════════════════════════════ */
+
+/* Storefront — premium e-commerce (Playfair serif, warm near-black + gold) */
+.theme-store {
+  --color-bg: #faf9f7;
+  --color-surface: #ffffff;
+  --color-glass: rgba(255, 255, 255, 0.78);
+  --color-ink: #0c0a09;
+  --color-muted: #57534e;
+  --color-faint: #a8a29e;
+  --color-line: #e7e5e4;
+  --color-line-soft: #f0efed;
+  --color-velvet: #1c1917;            /* primary: rich near-black */
+  --color-velvet-dark: #000000;
+  --color-velvet-soft: #f4efe6;       /* warm champagne wash */
+  --color-velvet-glow: rgba(161, 98, 7, 0.14);
+  --color-plum: #a16207;              /* accent: burnished gold */
+  --shadow-glow: 0 0 24px rgba(161, 98, 7, 0.16);
+}
+
+/* Ops console — inventory/operations software (flat industrial slate + stock green) */
+.theme-ops {
+  --color-bg: #f6f8fa;
+  --color-surface: #ffffff;
+  --color-glass: rgba(255, 255, 255, 0.92);
+  --color-ink: #0f172a;
+  --color-muted: #475569;
+  --color-faint: #94a3b8;
+  --color-line: #e2e8f0;
+  --color-line-soft: #edf2f7;
+  --color-velvet: #334155;            /* primary: industrial slate */
+  --color-velvet-dark: #1e293b;
+  --color-velvet-soft: #e8edf3;
+  --color-velvet-glow: rgba(51, 65, 85, 0.1);
+  --color-plum: #059669;              /* accent: stock green */
+  --shadow-glow: 0 0 16px rgba(5, 150, 105, 0.12);
+  --font-playfair: var(--font-inter); /* no serif in the ops tool */
+}
+
+/* Analytics — super-admin dashboard (data blue + amber highlights) */
+.theme-analytics {
+  --color-bg: #f7f9fc;
+  --color-surface: #ffffff;
+  --color-glass: rgba(255, 255, 255, 0.9);
+  --color-ink: #0f1e46;
+  --color-muted: #47569e;
+  --color-faint: #8b96c8;
+  --color-line: #dde5f4;
+  --color-line-soft: #eaeff8;
+  --color-velvet: #1e40af;            /* primary: data blue */
+  --color-velvet-dark: #1e3a8a;
+  --color-velvet-soft: #e8eefb;
+  --color-velvet-glow: rgba(30, 64, 175, 0.12);
+  --color-plum: #b45309;              /* accent: amber highlight */
+  --shadow-glow: 0 0 16px rgba(30, 64, 175, 0.14);
+  --font-playfair: var(--font-inter); /* numeric-first, no serif */
+}
+
+/* ═══════════════════════════════════════════════════════════
    BASE
    ═══════════════════════════════════════════════════════════ */
 

@@ -16,10 +16,29 @@ type Line = {
   isRequirement: boolean;
 };
 
-export function CartView({ lines, branchName }: { lines: Line[]; branchName: string | null }) {
+export type CartAddress = {
+  id: string;
+  label: string;
+  summary: string;
+  isDefault: boolean;
+};
+
+export function CartView({
+  lines,
+  branchName,
+  addresses,
+}: {
+  lines: Line[];
+  branchName: string | null;
+  addresses: CartAddress[];
+}) {
   const router = useRouter();
-  const [step, setStep] = useState<"cart" | "auth">("cart");
+  const [step, setStep] = useState<"cart" | "delivery" | "auth">("cart");
   const [authCode, setAuthCode] = useState("");
+  const [addressId, setAddressId] = useState(
+    addresses.find((a) => a.isDefault)?.id ?? addresses[0]?.id ?? ""
+  );
+  const [deliveryNote, setDeliveryNote] = useState("");
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
 
@@ -48,7 +67,11 @@ export function CartView({ lines, branchName }: { lines: Line[]; branchName: str
   function submit() {
     setError("");
     startTransition(async () => {
-      const res = await placeOrder({ authCode });
+      const res = await placeOrder({
+        authCode,
+        shipToAddressId: addressId,
+        deliveryNote: deliveryNote.trim() || undefined,
+      });
       if (!res.ok) {
         setError(res.error);
         return;
@@ -137,16 +160,85 @@ export function CartView({ lines, branchName }: { lines: Line[]; branchName: str
 
         {step === "cart" && (
           <button
-            onClick={() => setStep("auth")}
-            className="w-full mt-5 h-11 rounded-full bg-velvet text-white text-sm font-semibold hover:bg-velvet-dark transition-colors"
+            onClick={() => setStep("delivery")}
+            className="w-full mt-5 h-11 rounded-full bg-velvet text-white text-sm font-semibold hover:bg-velvet-dark transition-colors cursor-pointer btn-press"
           >
             Proceed to checkout
           </button>
         )}
 
+        {step === "delivery" && (
+          <div className="mt-5 animate-fade-in">
+            <div className="text-xs uppercase tracking-wide text-muted font-semibold mb-2">
+              Deliver to
+            </div>
+            {addresses.length === 0 ? (
+              <div className="text-sm text-muted bg-bg border border-dashed border-line rounded-lg p-4">
+                No delivery address on file yet.{" "}
+                <a href="/purchase-manager/account/addresses" className="text-velvet font-medium hover:underline">
+                  Add one in your account
+                </a>{" "}
+                to continue.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {addresses.map((a) => (
+                  <label
+                    key={a.id}
+                    className={`flex items-start gap-2.5 border rounded-lg p-3 cursor-pointer transition-colors ${
+                      addressId === a.id ? "border-velvet bg-velvet-soft/60" : "border-line hover:border-velvet/40"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="address"
+                      checked={addressId === a.id}
+                      onChange={() => setAddressId(a.id)}
+                      className="mt-0.5 accent-[var(--color-velvet)]"
+                    />
+                    <span className="min-w-0">
+                      <span className="block text-sm font-semibold">
+                        {a.label}
+                        {a.isDefault && <span className="text-[10px] text-velvet font-bold uppercase ml-2">Default</span>}
+                      </span>
+                      <span className="block text-xs text-muted mt-0.5">{a.summary}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            )}
+
+            <label className="block mt-3">
+              <span className="block text-xs uppercase tracking-wide text-muted font-semibold mb-1.5">
+                Delivery note (optional)
+              </span>
+              <input
+                value={deliveryNote}
+                onChange={(e) => setDeliveryNote(e.target.value)}
+                placeholder="Gate code, timing, receiving person…"
+                className="w-full bg-bg border border-line rounded-lg px-3 h-10 text-sm focus:border-velvet outline-none"
+              />
+            </label>
+
+            <button
+              onClick={() => { if (addressId) { setStep("auth"); setError(""); } }}
+              disabled={!addressId}
+              className="w-full mt-4 h-11 rounded-full bg-velvet text-white text-sm font-semibold hover:bg-velvet-dark transition-colors disabled:opacity-50 cursor-pointer btn-press"
+            >
+              Continue to authorization
+            </button>
+            <button
+              onClick={() => setStep("cart")}
+              className="w-full mt-2 text-xs text-muted hover:text-ink cursor-pointer"
+            >
+              Back to cart
+            </button>
+          </div>
+        )}
+
         {step === "auth" && (
-          <div className="mt-5">
-            <label className="block text-xs uppercase tracking-wide text-muted mb-2">
+          <div className="mt-5 animate-fade-in">
+            <label className="block text-xs uppercase tracking-wide text-muted font-semibold mb-2">
               Authorization code
             </label>
             <input
@@ -160,15 +252,15 @@ export function CartView({ lines, branchName }: { lines: Line[]; branchName: str
             <button
               onClick={submit}
               disabled={pending || authCode.trim().length === 0}
-              className="w-full mt-3 h-11 rounded-full bg-velvet text-white text-sm font-semibold hover:bg-velvet-dark transition-colors disabled:opacity-60"
+              className="w-full mt-3 h-11 rounded-full bg-velvet text-white text-sm font-semibold hover:bg-velvet-dark transition-colors disabled:opacity-60 cursor-pointer btn-press"
             >
               {pending ? "Placing…" : "Place order"}
             </button>
             <button
-              onClick={() => { setStep("cart"); setError(""); }}
-              className="w-full mt-2 text-xs text-muted hover:text-ink"
+              onClick={() => { setStep("delivery"); setError(""); }}
+              className="w-full mt-2 text-xs text-muted hover:text-ink cursor-pointer"
             >
-              Back to cart
+              Back to delivery
             </button>
             <p className="text-[11px] text-faint mt-3">
               Submitting reserves stock for your branch and sends the order to the warehouse.

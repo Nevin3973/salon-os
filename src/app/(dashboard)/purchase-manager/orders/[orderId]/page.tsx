@@ -25,6 +25,7 @@ export default async function OrderDetailPage({
           deliveries: { orderBy: { createdAt: "asc" } },
         },
       },
+      shipToAddress: true,
     },
   });
   if (!order) notFound();
@@ -65,6 +66,32 @@ export default async function OrderDetailPage({
           <OrderActions orderId={order.id} status={order.status} />
         </div>
       </div>
+
+      {(order.shipToAddress || order.deliveryNote) && (
+        <div className="bg-surface border border-line rounded-xl p-4 mt-4 text-sm">
+          <div className="text-xs uppercase tracking-wider text-faint font-semibold mb-1.5">
+            Delivering to
+          </div>
+          {order.shipToAddress && (
+            <div className="text-muted">
+              <span className="font-medium text-ink">{order.shipToAddress.label}</span>
+              {" — "}
+              {[
+                order.shipToAddress.line1,
+                order.shipToAddress.line2,
+                order.shipToAddress.city,
+                order.shipToAddress.state,
+                order.shipToAddress.postalCode,
+              ]
+                .filter(Boolean)
+                .join(", ")}
+            </div>
+          )}
+          {order.deliveryNote && (
+            <div className="text-faint italic mt-1">“{order.deliveryNote}”</div>
+          )}
+        </div>
+      )}
 
       {/* Progress bar */}
       <div className="bg-surface border border-line rounded-xl p-4 mt-4">

@@ -11,7 +11,7 @@ export default async function PurchaseManagerLayout({ children }: { children: Re
   ]);
 
   return (
-    <div className="min-h-screen">
+    <div className="theme-store min-h-screen bg-bg text-ink">
       <StorefrontHeader
         userName={session.name}
         orgName={orgName}
