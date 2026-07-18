@@ -77,7 +77,7 @@ export async function applyDispatch(input: {
 
       const order = await tx.order.findFirst({
         where: { id: orderId, orgId: session.orgId },
-        include: { items: { include: { product: true } } },
+        include: { items: { include: { product: true } }, branch: { select: { name: true } } },
       });
       if (!order) throw new Error("NOT_FOUND");
       if (order.status !== "PROCESSING") throw new Error("NOT_PROCESSING");
@@ -128,7 +128,7 @@ export async function applyDispatch(input: {
               userId: session.userId,
               prevQty: prev,
               newQty: next,
-              action: `Dispatch · ${orderCode(order.orderNo)} → ${order.branchId}`,
+              action: `Dispatch · ${orderCode(order.orderNo)} → ${order.branch.name}`,
               refOrderId: order.id,
             },
           });
