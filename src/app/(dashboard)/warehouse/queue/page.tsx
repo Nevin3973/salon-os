@@ -50,13 +50,21 @@ export default async function QueuePage() {
 
   return (
     <div>
-      <div className="mb-5">
-        <h1 className="font-display text-2xl font-semibold">Order queue</h1>
-        <p className="text-muted text-sm mt-1">
+      <div className="mb-6">
+        <h1 className="font-display text-3xl font-bold text-ink">Order queue</h1>
+        <p className="text-muted text-sm mt-2 leading-relaxed max-w-2xl">
           {queue.length === 0
-            ? "The queue is clear. New branch orders appear here the moment they’re placed."
-            : `${queue.length} order${queue.length === 1 ? "" : "s"} to process. Dispatch what you have now and keep an order open, or close it and log what’s outstanding.`}
+            ? "The queue is clear. New branch orders appear here the moment they're placed."
+            : `${queue.length} order${queue.length === 1 ? "" : "s"} to process. Dispatch what you have now and keep an order open, or close it and log what's outstanding.`}
         </p>
+        {queue.length > 0 && (
+          <div className="mt-4">
+            <div className="glass-surface rounded-xl px-4 py-2.5 inline-flex items-center gap-2 animate-scale-in">
+              <span className="w-2 h-2 rounded-full bg-velvet animate-pulse-soft" />
+              <span className="text-xs text-velvet font-semibold">{queue.length} in queue</span>
+            </div>
+          </div>
+        )}
       </div>
 
       <DispatchBoard orders={queue} reasons={[...OUTSTANDING_REASONS]} />

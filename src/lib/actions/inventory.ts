@@ -74,6 +74,7 @@ export async function fulfilOutstanding(input: { orderItemId: string }): Promise
 
   try {
     await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "OrderItem" WHERE id = ${orderItemId} FOR UPDATE`;
       const item = await tx.orderItem.findFirst({
         where: { id: orderItemId, order: { orgId: session.orgId } },
         include: { order: true, product: true },
@@ -182,10 +183,19 @@ export async function previewImport(input: {
   const valid: PreviewRow[] = [];
   const errors: string[] = [];
   const warnings: string[] = [];
+  const seenInSheet = new Set<string>();
 
   rows.forEach((r, i) => {
     const rowNo = i + 2; // header is row 1
     const match = r.sku ? bySku.get(r.sku) : undefined;
+    if (r.sku && r.sku.trim() !== "") {
+      const skuNorm = r.sku.trim();
+      if (seenInSheet.has(skuNorm)) {
+        errors.push(`Row ${rowNo}: Duplicate SKU “${r.sku}” found in sheet`);
+        return;
+      }
+      seenInSheet.add(skuNorm);
+    }
     if (!r.name) {
       errors.push(`Row ${rowNo}: missing product name${r.sku ? ` (SKU ${r.sku})` : ""}`);
       return;
@@ -258,6 +268,7 @@ export async function confirmImport(input: {
               active: true,
             },
           });
+          match.stock = r.qty; // Update stock in-memory cache to prevent incorrect stock movements on duplicate SKUs
           updated++;
         } else {
           const p = await tx.product.create({
@@ -273,6 +284,7 @@ export async function confirmImport(input: {
             },
           });
           seenSkus.add(p.sku);
+          bySku.set(p.sku, p); // Add new product to in-memory cache to prevent duplicate inserts and unique constraint violation crashes
           await tx.stockMovement.create({
             data: {
               orgId: session.orgId,

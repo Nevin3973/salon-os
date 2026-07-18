@@ -18,7 +18,7 @@ export default async function WarehouseLayout({ children }: { children: React.Re
   );
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen bg-bg">
       <TopNav
         subtitle="Warehouse"
         userName={session.name}
@@ -31,7 +31,9 @@ export default async function WarehouseLayout({ children }: { children: React.Re
           { label: "Log", href: "/warehouse/log" },
         ]}
       />
-      <main className="max-w-6xl mx-auto px-6 py-8">{children}</main>
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 animate-slide-up">
+        {children}
+      </main>
     </div>
   );
 }
