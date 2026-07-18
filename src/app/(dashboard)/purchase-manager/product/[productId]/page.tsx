@@ -42,6 +42,7 @@ export default async function ProductDetailPage({
       brand: p.brand,
       category: p.category,
       unit: p.unit,
+      imageUrl: p.imageUrl,
       available: avail,
       state: stockState(avail, p.minStock),
     };
@@ -64,14 +65,21 @@ export default async function ProductDetailPage({
 
       <div className="grid lg:grid-cols-[1.1fr_1fr] gap-10 mt-6 items-start">
         {/* Gallery */}
-        <div
-          className="rounded-2xl aspect-[4/3] grid place-items-center border border-line"
-          style={{ background: tint(product.category) }}
-        >
-          <span className="font-display text-8xl text-velvet/25 select-none">
-            {product.brand.charAt(0)}
-          </span>
-        </div>
+        {product.imageUrl ? (
+          <div className="rounded-xl aspect-[4/3] overflow-hidden border border-line bg-white">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" />
+          </div>
+        ) : (
+          <div
+            className="rounded-xl aspect-[4/3] grid place-items-center border border-line"
+            style={{ background: tint(product.category) }}
+          >
+            <span className="font-display text-8xl text-velvet/25 select-none">
+              {product.brand.charAt(0)}
+            </span>
+          </div>
+        )}
 
         {/* Details */}
         <div>

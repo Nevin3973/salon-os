@@ -118,7 +118,7 @@ function OrderCard({ order, reasons }: { order: QueueOrder; reasons: string[] })
         <span
           className={`ml-auto text-xs font-semibold px-3 py-1 rounded-full border transition-colors ${
             order.status === "PENDING"
-              ? "bg-slate-50 text-slate-600 border-slate-200"
+              ? "bg-surface-raised text-muted border-line"
               : "bg-velvet-soft text-velvet border-velvet/20"
           }`}
         >
@@ -238,7 +238,7 @@ function OrderCard({ order, reasons }: { order: QueueOrder; reasons: string[] })
           })}
 
           {error && (
-            <div className="bg-out-soft border border-rose-200 text-out text-sm px-4 py-3 rounded-xl animate-scale-in">
+            <div className="bg-out-soft border border-out/25 text-out text-sm px-4 py-3 rounded-xl animate-scale-in">
               {error}
             </div>
           )}
@@ -247,7 +247,7 @@ function OrderCard({ order, reasons }: { order: QueueOrder; reasons: string[] })
             <button
               onClick={start}
               disabled={pending}
-              className="h-11 px-6 rounded-xl bg-velvet text-white text-sm font-semibold hover:bg-velvet-dark transition-all duration-200 disabled:opacity-50 cursor-pointer btn-press shadow-sm hover:shadow-md flex items-center gap-2"
+              className="h-11 px-6 rounded-xl bg-velvet text-on-velvet text-sm font-semibold hover:bg-velvet-dark transition-all duration-200 disabled:opacity-50 cursor-pointer btn-press shadow-sm hover:shadow-md flex items-center gap-2"
             >
               {pending ? (
                 <>
@@ -275,14 +275,14 @@ function OrderCard({ order, reasons }: { order: QueueOrder; reasons: string[] })
                   onClick={() => dispatch(true)}
                   disabled={pending}
                   onBlur={() => setConfirmClose(false)}
-                  className="h-11 px-5 rounded-xl bg-plum text-white text-sm font-semibold cursor-pointer btn-press shadow-md animate-scale-in"
+                  className="h-11 px-5 rounded-xl bg-plum text-on-velvet text-sm font-semibold cursor-pointer btn-press shadow-md animate-scale-in"
                 >
                   Confirm — settle order
                 </button>
               ) : (
                 <button
                   onClick={() => setConfirmClose(true)}
-                  className="h-11 px-5 rounded-xl bg-velvet text-white text-sm font-semibold hover:bg-velvet-dark transition-all duration-200 cursor-pointer btn-press shadow-sm hover:shadow-md"
+                  className="h-11 px-5 rounded-xl bg-velvet text-on-velvet text-sm font-semibold hover:bg-velvet-dark transition-all duration-200 cursor-pointer btn-press shadow-sm hover:shadow-md"
                 >
                   {draftTotal === totalRemaining
                     ? "Dispatch all & complete"

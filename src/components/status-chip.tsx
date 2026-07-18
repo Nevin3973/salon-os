@@ -1,11 +1,11 @@
 import { statusLabel } from "@/lib/format";
 
 const STYLES: Record<string, string> = {
-  PENDING: "bg-slate-100 text-slate-600 border-slate-200",
+  PENDING: "bg-surface-raised text-muted border-line",
   PROCESSING: "bg-velvet-soft text-velvet border-velvet/20",
-  PARTIALLY_FULFILLED: "bg-low-soft text-low border-amber-200",
-  COMPLETED: "bg-in-soft text-in border-emerald-200",
-  CANCELLED: "bg-out-soft text-out border-rose-200",
+  PARTIALLY_FULFILLED: "bg-low-soft text-low border-low/25",
+  COMPLETED: "bg-in-soft text-in border-in/25",
+  CANCELLED: "bg-out-soft text-out border-out/25",
 };
 
 const PULSE_STATUSES = new Set(["PENDING", "PROCESSING"]);
@@ -14,7 +14,7 @@ export function StatusChip({ status }: { status: string }) {
   return (
     <span
       className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
-        STYLES[status] ?? "bg-slate-100 text-slate-600 border-slate-200"
+        STYLES[status] ?? "bg-surface-raised text-muted border-line"
       }`}
     >
       <span className="relative flex h-2 w-2">

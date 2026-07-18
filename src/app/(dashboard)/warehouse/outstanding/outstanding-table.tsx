@@ -49,7 +49,7 @@ export function OutstandingTable({ rows }: { rows: OutstandingRow[] }) {
   return (
     <div>
       {error && (
-        <div className="bg-out-soft border border-rose-200 text-out text-sm px-4 py-3 rounded-xl mb-4 animate-scale-in">
+        <div className="bg-out-soft border border-out/25 text-out text-sm px-4 py-3 rounded-xl mb-4 animate-scale-in">
           {error}
         </div>
       )}
@@ -91,7 +91,7 @@ export function OutstandingTable({ rows }: { rows: OutstandingRow[] }) {
                         <button
                           onClick={() => fulfil(r.orderItemId)}
                           disabled={pending}
-                          className="px-3.5 py-1.5 bg-velvet text-white text-xs font-semibold rounded-lg hover:bg-velvet-dark disabled:opacity-40 transition-all duration-200 cursor-pointer btn-press shadow-sm hover:shadow-md"
+                          className="px-3.5 py-1.5 bg-velvet text-on-velvet text-xs font-semibold rounded-lg hover:bg-velvet-dark disabled:opacity-40 transition-all duration-200 cursor-pointer btn-press shadow-sm hover:shadow-md"
                         >
                           {busy === r.orderItemId ? (
                             <span className="inline-flex items-center gap-1.5">
@@ -147,7 +147,7 @@ export function OutstandingTable({ rows }: { rows: OutstandingRow[] }) {
                   <button
                     onClick={() => fulfil(r.orderItemId)}
                     disabled={pending}
-                    className="w-full px-4 py-2.5 bg-velvet text-white text-sm font-semibold rounded-lg hover:bg-velvet-dark disabled:opacity-40 transition-all cursor-pointer btn-press"
+                    className="w-full px-4 py-2.5 bg-velvet text-on-velvet text-sm font-semibold rounded-lg hover:bg-velvet-dark disabled:opacity-40 transition-all cursor-pointer btn-press"
                     style={{ minHeight: 44 }}
                   >
                     {busy === r.orderItemId ? "Fulfilling…" : `Fulfil ${r.owed}`}

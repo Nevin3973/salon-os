@@ -113,7 +113,7 @@ export function MobileNav({
                 >
                   {item.label}
                   {item.badge ? (
-                    <span className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 rounded-full bg-velvet text-white text-[11px] font-semibold">
+                    <span className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 rounded-full bg-velvet text-on-velvet text-[11px] font-semibold">
                       {item.badge}
                     </span>
                   ) : null}

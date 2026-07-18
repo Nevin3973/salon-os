@@ -1,74 +1,105 @@
 @import "tailwindcss";
 
 /* ═══════════════════════════════════════════════════════════
-   VELVET — Design Tokens
-   Luxury salon supply · Playfair Display + Inter
+   SALON OS — Design tokens
+   by Infynix Growth Solutions
+   Source of truth: the user's design on the `design-reference`
+   branch. Marcellus display · Inter body · muted gold accent.
+   Root = light storefront. `.theme-ops` / `.theme-analytics`
+   switch the consoles to the dark system.
    ═══════════════════════════════════════════════════════════ */
 
 :root {
-  /* ── Surfaces ── */
-  --color-bg: #f8f6fb;
+  /* Surfaces (light storefront) */
+  --color-bg: #faf9f7;
   --color-surface: #ffffff;
   --color-surface-raised: #ffffff;
-  --color-glass: rgba(255, 255, 255, 0.72);
+  --color-glass: #ffffff;
 
-  /* ── Text ── */
-  --color-ink: #1b1626;
-  --color-muted: #5e5673;
-  --color-faint: #9a94a6;
+  /* Text */
+  --color-ink: #17150f;
+  --color-muted: #57534a;
+  --color-faint: #98938a;
 
-  /* ── Borders ── */
-  --color-line: #e9e5f0;
-  --color-line-soft: #f0edf5;
+  /* Hairlines */
+  --color-line: rgba(23, 21, 15, 0.12);
+  --color-line-soft: rgba(23, 21, 15, 0.06);
 
-  /* ── Brand ── */
-  --color-velvet: #6d28d9;
-  --color-velvet-dark: #5b21b6;
-  --color-velvet-soft: #f0ebfb;
-  --color-velvet-glow: rgba(109, 40, 217, 0.12);
-  --color-plum: #9d174d;
+  /* Primary interactive ("velvet" token family, kept for compatibility) */
+  --color-velvet: #1a170f;        /* near-black primary */
+  --color-velvet-dark: #000000;   /* hover */
+  --color-velvet-soft: #f3efe6;   /* soft wash */
+  --color-velvet-glow: rgba(200, 164, 78, 0.14);
+  --color-on-velvet: #ffffff;     /* text on primary */
+  --color-plum: #8d6e2f;          /* gold accent, darkened for light bg */
 
-  /* ── Semantic ── */
-  --color-in: #15803d;
-  --color-in-soft: #dcfce7;
-  --color-low: #b45309;
-  --color-low-soft: #fef3c7;
-  --color-out: #b91c1c;
-  --color-out-soft: #fee2e2;
-  --color-copper: #c2701a;
+  /* Semantic */
+  --color-in: #3d7a35;
+  --color-in-soft: #e9f2e6;
+  --color-low: #a25e1e;
+  --color-low-soft: #f8ecdd;
+  --color-out: #b03434;
+  --color-out-soft: #f9e7e7;
+  --color-copper: #a25e1e;
 
-  /* ── Spacing scale ── */
-  --space-xs: 4px;
-  --space-sm: 8px;
-  --space-md: 16px;
-  --space-lg: 24px;
-  --space-xl: 32px;
-  --space-2xl: 48px;
-  --space-3xl: 64px;
-
-  /* ── Timing ── */
-  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
-  --ease-in-out: cubic-bezier(0.45, 0, 0.55, 1);
-  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
-  --duration-fast: 150ms;
-  --duration-normal: 250ms;
-  --duration-slow: 400ms;
-
-  /* ── Radius ── */
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 16px;
-  --radius-xl: 20px;
+  /* Rhythm */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 14px;
   --radius-full: 9999px;
 
-  /* ── Shadows ── */
-  --shadow-sm: 0 1px 2px rgba(27, 22, 38, 0.04);
-  --shadow-md: 0 4px 12px rgba(27, 22, 38, 0.06);
-  --shadow-lg: 0 8px 30px rgba(27, 22, 38, 0.08);
-  --shadow-glow: 0 0 20px rgba(109, 40, 217, 0.15);
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.45, 0, 0.55, 1);
+  --ease-spring: cubic-bezier(0.34, 1.2, 0.64, 1);
+  --duration-fast: 120ms;
+  --duration-normal: 180ms;
+  --duration-slow: 240ms;
+
+  --shadow-sm: 0 1px 2px rgba(23, 21, 15, 0.05);
+  --shadow-md: 0 3px 10px rgba(23, 21, 15, 0.07);
+  --shadow-lg: 0 8px 24px rgba(23, 21, 15, 0.09);
+  --shadow-glow: none;
 }
 
-/* ── Tailwind v4 @theme tokens ── */
+/* ── Dark console system (user's Salon OS tokens, verbatim) ── */
+.theme-ops,
+.theme-analytics {
+  --color-bg: #0c0c0c;
+  --color-surface: #161616;
+  --color-surface-raised: #1e1e1e;
+  --color-glass: #161616;
+
+  --color-ink: #eaeaea;
+  --color-muted: #b0b0b0;
+  --color-faint: #717171;
+
+  --color-line: rgba(255, 255, 255, 0.07);
+  --color-line-soft: rgba(255, 255, 255, 0.04);
+
+  --color-velvet: #c8a44e;        /* muted gold is the primary here */
+  --color-velvet-dark: #ddbe6a;   /* hover = lighter on dark */
+  --color-velvet-soft: rgba(200, 164, 78, 0.1);
+  --color-velvet-glow: rgba(200, 164, 78, 0.12);
+  --color-on-velvet: #0c0c0c;     /* dark text on gold */
+  --color-plum: #d08c50;
+
+  --color-in: #7baf72;
+  --color-in-soft: rgba(123, 175, 114, 0.12);
+  --color-low: #d08c50;
+  --color-low-soft: rgba(208, 140, 80, 0.12);
+  --color-out: #cf5c5c;
+  --color-out-soft: rgba(207, 92, 92, 0.12);
+  --color-copper: #d08c50;
+
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.5);
+
+  color-scheme: dark;
+}
+
+/* ── Tailwind v4 theme mapping ── */
 @theme inline {
   --color-bg: var(--color-bg);
   --color-surface: var(--color-surface);
@@ -83,6 +114,7 @@
   --color-velvet-dark: var(--color-velvet-dark);
   --color-velvet-soft: var(--color-velvet-soft);
   --color-velvet-glow: var(--color-velvet-glow);
+  --color-on-velvet: var(--color-on-velvet);
   --color-plum: var(--color-plum);
   --color-in: var(--color-in);
   --color-in-soft: var(--color-in-soft);
@@ -91,90 +123,27 @@
   --color-out: var(--color-out);
   --color-out-soft: var(--color-out-soft);
   --color-copper: var(--color-copper);
-  --font-display: var(--font-playfair);
+  --font-display: var(--font-marcellus);
   --font-sans: var(--font-inter);
 }
 
-/* ═══════════════════════════════════════════════════════════
-   SURFACE THEMES
-   One brand, three products: each route-group layout wraps its
-   pages in a theme class that remaps the token families below.
-   Components keep using velvet/* utilities and inherit the
-   surface identity automatically.
-   ═══════════════════════════════════════════════════════════ */
-
-/* Storefront — premium e-commerce (Playfair serif, warm near-black + gold) */
+/* Legacy surface-theme hooks kept as no-ops (root/light is the default). */
 .theme-store {
-  --color-bg: #faf9f7;
-  --color-surface: #ffffff;
-  --color-glass: rgba(255, 255, 255, 0.78);
-  --color-ink: #0c0a09;
-  --color-muted: #57534e;
-  --color-faint: #a8a29e;
-  --color-line: #e7e5e4;
-  --color-line-soft: #f0efed;
-  --color-velvet: #1c1917;            /* primary: rich near-black */
-  --color-velvet-dark: #000000;
-  --color-velvet-soft: #f4efe6;       /* warm champagne wash */
-  --color-velvet-glow: rgba(161, 98, 7, 0.14);
-  --color-plum: #a16207;              /* accent: burnished gold */
-  --shadow-glow: 0 0 24px rgba(161, 98, 7, 0.16);
-}
-
-/* Ops console — inventory/operations software (flat industrial slate + stock green) */
-.theme-ops {
-  --color-bg: #f6f8fa;
-  --color-surface: #ffffff;
-  --color-glass: rgba(255, 255, 255, 0.92);
-  --color-ink: #0f172a;
-  --color-muted: #475569;
-  --color-faint: #94a3b8;
-  --color-line: #e2e8f0;
-  --color-line-soft: #edf2f7;
-  --color-velvet: #334155;            /* primary: industrial slate */
-  --color-velvet-dark: #1e293b;
-  --color-velvet-soft: #e8edf3;
-  --color-velvet-glow: rgba(51, 65, 85, 0.1);
-  --color-plum: #059669;              /* accent: stock green */
-  --shadow-glow: 0 0 16px rgba(5, 150, 105, 0.12);
-  --font-playfair: var(--font-inter); /* no serif in the ops tool */
-}
-
-/* Analytics — super-admin dashboard (data blue + amber highlights) */
-.theme-analytics {
-  --color-bg: #f7f9fc;
-  --color-surface: #ffffff;
-  --color-glass: rgba(255, 255, 255, 0.9);
-  --color-ink: #0f1e46;
-  --color-muted: #47569e;
-  --color-faint: #8b96c8;
-  --color-line: #dde5f4;
-  --color-line-soft: #eaeff8;
-  --color-velvet: #1e40af;            /* primary: data blue */
-  --color-velvet-dark: #1e3a8a;
-  --color-velvet-soft: #e8eefb;
-  --color-velvet-glow: rgba(30, 64, 175, 0.12);
-  --color-plum: #b45309;              /* accent: amber highlight */
-  --shadow-glow: 0 0 16px rgba(30, 64, 175, 0.14);
-  --font-playfair: var(--font-inter); /* numeric-first, no serif */
 }
 
 /* ═══════════════════════════════════════════════════════════
    BASE
    ═══════════════════════════════════════════════════════════ */
 
-html {
-  scroll-behavior: smooth;
-}
-
 body {
   background: var(--color-bg);
   color: var(--color-ink);
+  font-size: 14px;
+  line-height: 1.55;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* ── Focus ── */
 input:focus-visible,
 button:focus-visible,
 select:focus-visible,
@@ -190,11 +159,12 @@ textarea:focus-visible {
 
 ::selection {
   background: var(--color-velvet-soft);
-  color: var(--color-velvet-dark);
 }
 
 /* ═══════════════════════════════════════════════════════════
-   ANIMATION KEYFRAMES
+   QUIET MOTION
+   The class names below are used across the app; they are kept
+   deliberately restrained — fast fades only, no movement.
    ═══════════════════════════════════════════════════════════ */
 
 @keyframes fadeIn {
@@ -202,75 +172,11 @@ textarea:focus-visible {
   to { opacity: 1; }
 }
 
-@keyframes slideUp {
-  from { opacity: 0; transform: translateY(12px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-@keyframes slideDown {
-  from { opacity: 0; transform: translateY(-8px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-@keyframes scaleIn {
-  from { opacity: 0; transform: scale(0.95); }
-  to { opacity: 1; transform: scale(1); }
-}
-
-@keyframes shimmer {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
-}
-
-@keyframes pulse-soft {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
-}
-
-@keyframes pulse-ring {
-  0% { transform: scale(1); opacity: 0.6; }
-  100% { transform: scale(2.2); opacity: 0; }
-}
-
-@keyframes gradient-shift {
-  0% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
-  100% { background-position: 0% 50%; }
-}
-
-@keyframes slide-in-right {
-  from { transform: translateX(100%); }
-  to { transform: translateX(0); }
-}
-
-@keyframes slide-out-right {
-  from { transform: translateX(0); }
-  to { transform: translateX(100%); }
-}
-
-@keyframes backdrop-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-/* ═══════════════════════════════════════════════════════════
-   ANIMATION UTILITIES
-   ═══════════════════════════════════════════════════════════ */
-
-.animate-fade-in {
-  animation: fadeIn var(--duration-normal) var(--ease-out) both;
-}
-
-.animate-slide-up {
-  animation: slideUp var(--duration-slow) var(--ease-out) both;
-}
-
-.animate-slide-down {
-  animation: slideDown var(--duration-normal) var(--ease-out) both;
-}
-
+.animate-fade-in,
+.animate-slide-up,
+.animate-slide-down,
 .animate-scale-in {
-  animation: scaleIn var(--duration-normal) var(--ease-spring) both;
+  animation: fadeIn var(--duration-fast) var(--ease-out) both;
 }
 
 .animate-shimmer {
@@ -278,65 +184,45 @@ textarea:focus-visible {
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
 }
-
-.animate-pulse-soft {
-  animation: pulse-soft 2s var(--ease-in-out) infinite;
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
 }
 
+.animate-pulse-soft,
 .animate-gradient {
-  background-size: 300% 300%;
-  animation: gradient-shift 8s ease infinite;
+  animation: none;
 }
 
-/* Stagger children delay utilities */
-.stagger-children > *:nth-child(1) { animation-delay: 0ms; }
-.stagger-children > *:nth-child(2) { animation-delay: 40ms; }
-.stagger-children > *:nth-child(3) { animation-delay: 80ms; }
-.stagger-children > *:nth-child(4) { animation-delay: 120ms; }
-.stagger-children > *:nth-child(5) { animation-delay: 160ms; }
-.stagger-children > *:nth-child(6) { animation-delay: 200ms; }
-.stagger-children > *:nth-child(7) { animation-delay: 240ms; }
-.stagger-children > *:nth-child(8) { animation-delay: 280ms; }
-.stagger-children > *:nth-child(9) { animation-delay: 320ms; }
-.stagger-children > *:nth-child(10) { animation-delay: 360ms; }
+.stagger-children > * {
+  animation-delay: 0ms;
+}
 
 /* ═══════════════════════════════════════════════════════════
-   GLASSMORPHISM
+   SURFACES & INTERACTIVE STATES
    ═══════════════════════════════════════════════════════════ */
 
-.glass {
-  background: var(--color-glass);
-  backdrop-filter: blur(16px) saturate(1.4);
-  -webkit-backdrop-filter: blur(16px) saturate(1.4);
-}
-
+/* Flat card — the old "glass" name kept for compatibility. */
+.glass,
 .glass-surface {
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid var(--color-line-soft);
-  box-shadow: var(--shadow-sm);
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
 }
-
-/* ═══════════════════════════════════════════════════════════
-   INTERACTIVE STATES
-   ═══════════════════════════════════════════════════════════ */
 
 .btn-press {
-  transition: transform var(--duration-fast) var(--ease-out),
-              box-shadow var(--duration-fast) var(--ease-out);
+  transition: opacity var(--duration-fast) var(--ease-out);
 }
 .btn-press:active {
-  transform: scale(0.97);
+  opacity: 0.85;
 }
 
 .hover-lift {
-  transition: transform var(--duration-normal) var(--ease-out),
-              box-shadow var(--duration-normal) var(--ease-out);
+  transition: border-color var(--duration-fast) var(--ease-out);
 }
 .hover-lift:hover {
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-md);
+  border-color: var(--color-faint);
+  transform: none;
+  box-shadow: none;
 }
 
 .row-hover {
@@ -347,7 +233,7 @@ textarea:focus-visible {
 }
 
 /* ═══════════════════════════════════════════════════════════
-   SCROLLBAR UTILITIES
+   SCROLLBARS
    ═══════════════════════════════════════════════════════════ */
 
 .no-scrollbar::-webkit-scrollbar { display: none; }
@@ -375,7 +261,6 @@ textarea:focus-visible {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
-  html { scroll-behavior: auto; }
 }
 
 /* ═══════════════════════════════════════════════════════════

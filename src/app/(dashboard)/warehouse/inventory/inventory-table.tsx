@@ -59,7 +59,7 @@ export function InventoryTable({ rows, activeFilter }: { rows: InventoryRow[]; a
             href={f.key === "all" ? "/warehouse/inventory" : `/warehouse/inventory?filter=${f.key}`}
             className={`px-4 py-2 rounded-full text-sm font-medium border cursor-pointer transition-all duration-200 btn-press ${
               activeFilter === f.key
-                ? "bg-velvet text-white border-velvet shadow-sm"
+                ? "bg-velvet text-on-velvet border-velvet shadow-sm"
                 : "bg-surface text-muted border-line hover:border-velvet/40 hover:text-ink hover:shadow-sm"
             }`}
           >
