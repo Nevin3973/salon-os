@@ -13,7 +13,11 @@ export type PlaceOrderResult =
   | { ok: true; orderId: string; orderNo: number; code: string }
   | { ok: false; error: string };
 
-const placeSchema = z.object({ authCode: z.string().min(1).max(64) });
+const placeSchema = z.object({
+  authCode: z.string().min(1).max(64),
+  shipToAddressId: z.string().min(1),
+  deliveryNote: z.string().max(500).optional(),
+});
 
 /**
  * Places the current user's cart as an order.
@@ -29,13 +33,37 @@ const placeSchema = z.object({ authCode: z.string().min(1).max(64) });
  *   an order does not mutate physical stock — that only happens at dispatch,
  *   where quantities are hard-clamped to what actually exists.
  */
-export async function placeOrder(input: { authCode: string }): Promise<PlaceOrderResult> {
+export async function placeOrder(input: {
+  authCode: string;
+  shipToAddressId: string;
+  deliveryNote?: string;
+}): Promise<PlaceOrderResult> {
   const parsed = placeSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: "Enter your authorization code." };
+  if (!parsed.success) {
+    const first = parsed.error.issues[0];
+    return {
+      ok: false,
+      error:
+        first?.path[0] === "shipToAddressId"
+          ? "Choose a delivery address."
+          : "Enter your authorization code.",
+    };
+  }
 
   const session = await requireSession("PURCHASE_MANAGER");
   if (!session.locationId) return { ok: false, error: "Your account is not assigned to a branch." };
   const branchId = session.locationId;
+
+  // The delivery address must be an active address of this branch.
+  const address = await prisma.address.findFirst({
+    where: {
+      id: parsed.data.shipToAddressId,
+      orgId: session.orgId,
+      locationId: branchId,
+      isActive: true,
+    },
+  });
+  if (!address) return { ok: false, error: "Choose a valid delivery address." };
 
   // Verify the authorization code against active codes scoped to this org,
   // that are either org-wide (locationId null) or match this branch.
@@ -85,6 +113,8 @@ export async function placeOrder(input: { authCode: string }): Promise<PlaceOrde
           placedByUserId: session.userId,
           status: "PENDING",
           authCodeId: matchedCodeId,
+          shipToAddressId: address.id,
+          deliveryNote: parsed.data.deliveryNote || null,
           items: {
             create: cart.map((line) => ({
               productId: line.productId,

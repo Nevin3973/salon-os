@@ -1,25 +1,27 @@
 import { requireSession, activeOrgName } from "@/lib/tenant";
-import { TopNav } from "@/components/top-nav";
+import { OpsShell } from "@/components/ops-shell";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const session = await requireSession("SUPER_ADMIN");
   const orgName = await activeOrgName();
 
   return (
-    <div className="min-h-screen">
-      <TopNav
-        subtitle="Admin"
+    <div className="theme-analytics bg-bg text-ink min-h-screen">
+      <OpsShell
+        brand="Velvet"
+        subtitle="Analytics"
         userName={session.name}
         orgName={orgName}
         items={[
-          { label: "Overview", href: "/admin/overview" },
-          { label: "Products", href: "/admin/products" },
-          { label: "Users", href: "/admin/users" },
-          { label: "Codes", href: "/admin/codes" },
-          { label: "Audit Log", href: "/admin/audit" },
+          { label: "Overview", href: "/admin/overview", icon: "gauge" },
+          { label: "Products", href: "/admin/products", icon: "tag" },
+          { label: "Users & salons", href: "/admin/users", icon: "users" },
+          { label: "Auth codes", href: "/admin/codes", icon: "key" },
+          { label: "Audit log", href: "/admin/audit", icon: "shield" },
         ]}
-      />
-      <main className="max-w-6xl mx-auto px-6 py-8">{children}</main>
+      >
+        {children}
+      </OpsShell>
     </div>
   );
 }

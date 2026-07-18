@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { addToCart } from "@/lib/actions/cart";
 import type { StockState } from "@/lib/stock";
@@ -50,18 +51,22 @@ export function ProductCard({ product }: { product: Product }) {
 
   return (
     <article className="bg-surface border border-line rounded-xl p-3 flex flex-col hover:shadow-[0_2px_16px_rgba(27,22,38,0.08)] hover:border-velvet/40 transition-all">
-      <div
-        className="h-32 rounded-lg grid place-items-center mb-3"
-        style={{ background: tint(product.category) }}
-      >
-        <span className="font-display text-3xl text-velvet/50">{product.brand.charAt(0)}</span>
-      </div>
+      <Link href={`/purchase-manager/product/${product.id}`} className="block group">
+        <div
+          className="h-32 rounded-lg grid place-items-center mb-3 group-hover:opacity-90 transition-opacity"
+          style={{ background: tint(product.category) }}
+        >
+          <span className="font-display text-3xl text-velvet/50">{product.brand.charAt(0)}</span>
+        </div>
 
-      <div className="text-[11px] tracking-wide text-faint uppercase">{product.sku}</div>
-      <h3 className="text-sm font-medium leading-snug mt-0.5 line-clamp-2 min-h-[2.5rem]">{product.name}</h3>
-      <div className="text-xs text-muted mt-0.5">
-        {product.brand} · per {product.unit}
-      </div>
+        <div className="text-[11px] tracking-wide text-faint uppercase">{product.sku}</div>
+        <h3 className="text-sm font-medium leading-snug mt-0.5 line-clamp-2 min-h-[2.5rem] group-hover:text-velvet transition-colors">
+          {product.name}
+        </h3>
+        <div className="text-xs text-muted mt-0.5">
+          {product.brand} · per {product.unit}
+        </div>
+      </Link>
 
       <div className="mt-2 flex items-center gap-1.5 text-xs">
         <span className={`inline-block w-1.5 h-1.5 rounded-full ${

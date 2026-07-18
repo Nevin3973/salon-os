@@ -1,5 +1,5 @@
 import { requireScopedSession, activeOrgName } from "@/lib/tenant";
-import { TopNav } from "@/components/top-nav";
+import { OpsShell } from "@/components/ops-shell";
 
 export default async function WarehouseLayout({ children }: { children: React.ReactNode }) {
   const { session, db } = await requireScopedSession("WAREHOUSE_MANAGER");
@@ -18,22 +18,22 @@ export default async function WarehouseLayout({ children }: { children: React.Re
   );
 
   return (
-    <div className="min-h-screen bg-bg">
-      <TopNav
-        subtitle="Warehouse"
+    <div className="theme-ops bg-bg text-ink min-h-screen">
+      <OpsShell
+        brand="Velvet"
+        subtitle="Operations"
         userName={session.name}
         orgName={orgName}
         items={[
-          { label: "Queue", href: "/warehouse/queue", badge: queueCount || undefined },
-          { label: "Outstanding", href: "/warehouse/outstanding", badge: outstandingCount || undefined },
-          { label: "Inventory", href: "/warehouse/inventory" },
-          { label: "Import", href: "/warehouse/import" },
-          { label: "Log", href: "/warehouse/log" },
+          { label: "Order queue", href: "/warehouse/queue", icon: "queue", badge: queueCount || undefined },
+          { label: "Pending supplies", href: "/warehouse/outstanding", icon: "clock", badge: outstandingCount || undefined },
+          { label: "Inventory", href: "/warehouse/inventory", icon: "boxes" },
+          { label: "Import", href: "/warehouse/import", icon: "upload" },
+          { label: "Movement log", href: "/warehouse/log", icon: "list" },
         ]}
-      />
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 animate-slide-up">
+      >
         {children}
-      </main>
+      </OpsShell>
     </div>
   );
 }

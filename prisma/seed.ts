@@ -173,6 +173,22 @@ async function seedOrg(opts: {
   });
   console.log(`  ADMIN ${opts.adminName} <${adminEmail}>`);
 
+  // A default delivery address per branch so checkout works immediately.
+  for (let i = 0; i < branches.length; i++) {
+    await prisma.address.create({
+      data: {
+        orgId: org.id,
+        locationId: branches[i].id,
+        label: `${branches[i].name} — reception`,
+        contactName: opts.pmNames[i],
+        line1: `${10 + i * 4} ${branches[i].name}`,
+        city: "Dubai",
+        country: "United Arab Emirates",
+        isDefault: true,
+      },
+    });
+  }
+
   // Branch-scoped authorization codes, matching the prototype's ROSE-4821 style.
   for (const branch of branches) {
     const raw = `${branch.name.slice(0, 4).toUpperCase().replace(/[^A-Z]/g, "")}-${Math.floor(1000 + Math.random() * 9000)}`;
