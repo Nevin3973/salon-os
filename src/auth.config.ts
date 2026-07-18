@@ -1,4 +1,15 @@
 import type { NextAuthConfig } from "next-auth";
+import type { Role } from "@prisma/client";
+import type { MembershipSummary } from "@/lib/types";
+
+type AppClaims = {
+  uid: string;
+  mustChangePassword: boolean;
+  memberships: MembershipSummary[];
+  activeOrgId: string | null;
+  activeRole: Role | null;
+  activeLocationId: string | null;
+};
 
 /**
  * Edge-safe NextAuth config: no Credentials provider, no Prisma import here.
@@ -15,41 +26,44 @@ export const authConfig: NextAuthConfig = {
   providers: [],
   callbacks: {
     async jwt({ token, user, trigger, session }) {
+      const t = token as typeof token & AppClaims;
+
       // Initial sign-in: `user` is whatever `authorize()` returned.
       if (user) {
-        token.uid = user.id!;
-        token.mustChangePassword = Boolean((user as { mustChangePassword?: boolean }).mustChangePassword);
-        token.memberships = user.memberships ?? [];
-        token.activeOrgId = null;
-        token.activeRole = null;
-        token.activeLocationId = null;
-        if (token.memberships.length === 1) {
-          const only = token.memberships[0];
-          token.activeOrgId = only.orgId;
-          token.activeRole = only.role;
-          token.activeLocationId = only.locationId;
+        t.uid = user.id!;
+        t.mustChangePassword = Boolean((user as { mustChangePassword?: boolean }).mustChangePassword);
+        t.memberships = (user as { memberships?: MembershipSummary[] }).memberships ?? [];
+        t.activeOrgId = null;
+        t.activeRole = null;
+        t.activeLocationId = null;
+        if (t.memberships.length === 1) {
+          const only = t.memberships[0];
+          t.activeOrgId = only.orgId;
+          t.activeRole = only.role;
+          t.activeLocationId = only.locationId;
         }
       }
 
       // Org-picker: client calls `update({ orgId })` after choosing an org.
       if (trigger === "update" && session?.orgId) {
-        const chosen = token.memberships.find((m) => m.orgId === session.orgId);
+        const chosen = t.memberships.find((m) => m.orgId === session.orgId);
         if (chosen) {
-          token.activeOrgId = chosen.orgId;
-          token.activeRole = chosen.role;
-          token.activeLocationId = chosen.locationId;
+          t.activeOrgId = chosen.orgId;
+          t.activeRole = chosen.role;
+          t.activeLocationId = chosen.locationId;
         }
       }
 
-      return token;
+      return t;
     },
     async session({ session, token }) {
-      session.user.id = token.uid;
-      session.user.mustChangePassword = token.mustChangePassword;
-      session.memberships = token.memberships;
-      session.activeOrgId = token.activeOrgId;
-      session.activeRole = token.activeRole;
-      session.activeLocationId = token.activeLocationId;
+      const t = token as typeof token & AppClaims;
+      session.user.id = t.uid;
+      session.user.mustChangePassword = t.mustChangePassword;
+      session.memberships = t.memberships;
+      session.activeOrgId = t.activeOrgId;
+      session.activeRole = t.activeRole;
+      session.activeLocationId = t.activeLocationId;
       return session;
     },
     authorized({ auth, request }) {
