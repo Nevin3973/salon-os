@@ -8,8 +8,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   return (
     <div className="theme-analytics bg-bg text-ink min-h-screen">
       <OpsShell
-        brand="Velvet"
-        subtitle="Analytics"
+        brand="Salon OS"
+        subtitle="Head office"
         userName={session.name}
         orgName={orgName}
         items={[

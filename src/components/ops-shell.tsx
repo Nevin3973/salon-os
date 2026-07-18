@@ -85,7 +85,7 @@ export function OpsShell({
             onClick={() => setMobileOpen(false)}
             className={`flex items-center gap-3 px-3 h-10 rounded-lg text-sm font-medium transition-colors ${
               active
-                ? "bg-velvet text-white shadow-sm"
+                ? "bg-velvet text-on-velvet"
                 : "text-muted hover:text-ink hover:bg-velvet-soft"
             }`}
           >
@@ -106,7 +106,7 @@ export function OpsShell({
             {item.badge ? (
               <span
                 className={`inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full text-[11px] font-bold ${
-                  active ? "bg-white/20 text-white" : "bg-plum text-white"
+                  active ? "bg-on-velvet/20 text-on-velvet" : "bg-plum text-on-velvet"
                 }`}
               >
                 {item.badge}
@@ -121,7 +121,7 @@ export function OpsShell({
   const footer = (
     <div className="px-4 py-4 border-t border-line">
       <div className="flex items-center gap-3">
-        <span className="w-9 h-9 rounded-lg bg-velvet text-white grid place-items-center text-sm font-bold shrink-0">
+        <span className="w-9 h-9 rounded-lg bg-velvet text-on-velvet grid place-items-center text-sm font-bold shrink-0">
           {userName.charAt(0)}
         </span>
         <div className="min-w-0 flex-1">

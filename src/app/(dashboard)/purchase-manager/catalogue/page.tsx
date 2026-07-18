@@ -41,6 +41,7 @@ export default async function CataloguePage({
       brand: p.brand,
       category: p.category,
       unit: p.unit,
+      imageUrl: p.imageUrl,
       available,
       state: stockState(available, p.minStock),
     };
@@ -49,10 +50,9 @@ export default async function CataloguePage({
   return (
     <div>
       <div className="mb-5">
-        <h1 className="font-display text-3xl font-semibold">Shop supplies</h1>
+        <h1 className="font-display text-3xl">Shop supplies</h1>
         <p className="text-muted text-sm mt-1">
-          Availability is what the warehouse can promise today. Out-of-stock items can still be
-          requested — place a requirement and the warehouse fulfils it when stock lands.
+          Out of stock? You can still order it — the warehouse sends it when stock arrives.
         </p>
       </div>
 

@@ -51,13 +51,13 @@ export default async function InventoryPage({
             <span className="text-sm font-bold text-ink tabular-nums">{totalCount}</span>
           </div>
           {lowCount > 0 && (
-            <div className="bg-low-soft border border-amber-200 rounded-xl px-4 py-2.5 flex items-center gap-2 animate-scale-in">
+            <div className="bg-low-soft border border-low/25 rounded-xl px-4 py-2.5 flex items-center gap-2 animate-scale-in">
               <span className="w-2 h-2 rounded-full bg-low" />
               <span className="text-xs text-low font-semibold">{lowCount} low</span>
             </div>
           )}
           {outCount > 0 && (
-            <div className="bg-out-soft border border-rose-200 rounded-xl px-4 py-2.5 flex items-center gap-2 animate-scale-in">
+            <div className="bg-out-soft border border-out/25 rounded-xl px-4 py-2.5 flex items-center gap-2 animate-scale-in">
               <span className="w-2 h-2 rounded-full bg-out animate-pulse-soft" />
               <span className="text-xs text-out font-semibold">{outCount} out</span>
             </div>

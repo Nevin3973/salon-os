@@ -13,6 +13,7 @@ type Product = {
   brand: string;
   category: string;
   unit: string;
+  imageUrl?: string | null;
   available: number;
   state: StockState;
 };
@@ -52,12 +53,19 @@ export function ProductCard({ product }: { product: Product }) {
   return (
     <article className="bg-surface border border-line rounded-xl p-3 flex flex-col hover:shadow-[0_2px_16px_rgba(27,22,38,0.08)] hover:border-velvet/40 transition-all">
       <Link href={`/purchase-manager/product/${product.id}`} className="block group">
-        <div
-          className="h-32 rounded-lg grid place-items-center mb-3 group-hover:opacity-90 transition-opacity"
-          style={{ background: tint(product.category) }}
-        >
-          <span className="font-display text-3xl text-velvet/50">{product.brand.charAt(0)}</span>
-        </div>
+        {product.imageUrl ? (
+          <div className="h-32 rounded-lg overflow-hidden mb-3 bg-white group-hover:opacity-90 transition-opacity">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" />
+          </div>
+        ) : (
+          <div
+            className="h-32 rounded-lg grid place-items-center mb-3 group-hover:opacity-90 transition-opacity"
+            style={{ background: tint(product.category) }}
+          >
+            <span className="font-display text-3xl text-velvet/50">{product.brand.charAt(0)}</span>
+          </div>
+        )}
 
         <div className="text-[11px] tracking-wide text-faint uppercase">{product.sku}</div>
         <h3 className="text-sm font-medium leading-snug mt-0.5 line-clamp-2 min-h-[2.5rem] group-hover:text-velvet transition-colors">

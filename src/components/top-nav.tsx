@@ -45,7 +45,7 @@ export function TopNav({
               >
                 {item.label}
                 {item.badge ? (
-                  <span className="ml-1.5 inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-velvet text-white text-[11px] font-semibold relative">
+                  <span className="ml-1.5 inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-velvet text-on-velvet text-[11px] font-semibold relative">
                     {item.badge}
                     <span className="absolute inset-0 rounded-full bg-velvet animate-pulse-soft opacity-40" />
                   </span>

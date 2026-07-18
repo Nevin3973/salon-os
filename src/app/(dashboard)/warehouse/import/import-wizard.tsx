@@ -178,9 +178,9 @@ export function ImportWizard() {
             <div className="flex items-center gap-1.5">
               <div className={`w-6 h-6 rounded-full text-[11px] font-bold flex items-center justify-center transition-all duration-300 ${
                 i + 1 < step
-                  ? "bg-velvet text-white"
+                  ? "bg-velvet text-on-velvet"
                   : i + 1 === step
-                  ? "bg-velvet text-white shadow-sm"
+                  ? "bg-velvet text-on-velvet shadow-sm"
                   : "bg-line text-faint"
               }`}>
                 {i + 1 < step ? (
@@ -208,7 +208,7 @@ export function ImportWizard() {
             onClick={() => reValidate(m)}
             className={`px-4 py-2 rounded-full text-sm font-medium border cursor-pointer transition-all duration-200 btn-press ${
               mode === m
-                ? "bg-velvet text-white border-velvet shadow-sm"
+                ? "bg-velvet text-on-velvet border-velvet shadow-sm"
                 : "bg-bg text-muted border-line hover:border-velvet/40 hover:text-ink"
             }`}
           >
@@ -270,7 +270,7 @@ export function ImportWizard() {
       </div>
 
       {error && (
-        <div className="bg-out-soft border border-rose-200 text-out text-sm px-4 py-3 rounded-xl mt-4 animate-scale-in">
+        <div className="bg-out-soft border border-out/25 text-out text-sm px-4 py-3 rounded-xl mt-4 animate-scale-in">
           {error}
         </div>
       )}
@@ -279,7 +279,7 @@ export function ImportWizard() {
       {preview && (
         <div className="mt-6 animate-slide-up">
           {preview.errors.length > 0 && (
-            <div className="border border-rose-200 bg-out-soft rounded-xl p-4 mb-4 animate-scale-in">
+            <div className="border border-out/25 bg-out-soft rounded-xl p-4 mb-4 animate-scale-in">
               <div className="text-out text-sm font-semibold flex items-center gap-2">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="shrink-0">
                   <circle cx="12" cy="12" r="10" />
@@ -297,7 +297,7 @@ export function ImportWizard() {
             </div>
           )}
           {preview.warnings.length > 0 && (
-            <div className="border border-amber-200 bg-low-soft rounded-xl p-4 mb-4 animate-scale-in">
+            <div className="border border-low/25 bg-low-soft rounded-xl p-4 mb-4 animate-scale-in">
               <div className="text-low text-sm font-semibold flex items-center gap-2">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="shrink-0">
                   <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
@@ -353,7 +353,7 @@ export function ImportWizard() {
             <button
               onClick={confirm}
               disabled={pending || preview.valid.length === 0}
-              className="h-11 px-6 rounded-xl bg-velvet text-white text-sm font-semibold hover:bg-velvet-dark transition-all duration-200 disabled:opacity-40 cursor-pointer btn-press shadow-sm hover:shadow-md flex items-center gap-2"
+              className="h-11 px-6 rounded-xl bg-velvet text-on-velvet text-sm font-semibold hover:bg-velvet-dark transition-all duration-200 disabled:opacity-40 cursor-pointer btn-press shadow-sm hover:shadow-md flex items-center gap-2"
             >
               {pending ? (
                 <>
