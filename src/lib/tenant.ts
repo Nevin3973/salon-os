@@ -40,26 +40,22 @@ export function getScopedDb(orgId: string) {
             return query(args);
           }
 
-          const a = args as Record<string, unknown>;
+          // `args` can be undefined entirely (e.g. `findMany()` / `count()`),
+          // so normalize first — every operation below must still get scoped.
+          const a = (args ?? {}) as Record<string, unknown>;
 
           if (operation === "create") {
             a.data = { ...(a.data as object), orgId };
-          } else if (operation === "createMany" && Array.isArray((a.data as unknown[]))) {
+          } else if (operation === "createMany" && Array.isArray(a.data)) {
             a.data = (a.data as Record<string, unknown>[]).map((d) => ({ ...d, orgId }));
-          } else if (
-            operation === "findUnique" ||
-            operation === "findUniqueOrThrow"
-          ) {
-            // findUnique only accepts unique-field where clauses; re-run as
-            // findFirst so we can safely AND-in the org filter.
-            const where = { ...(a.where as object), orgId };
-            return (query as unknown as (args: unknown) => Promise<unknown>)({
-              ...a,
-              where,
-            });
-          } else if ("where" in a) {
-            a.where = { ...(a.where as object), orgId };
-          } else if (operation === "aggregate" || operation === "groupBy" || operation === "count") {
+          } else if (operation === "upsert") {
+            a.where = { ...((a.where as object) ?? {}), orgId };
+            a.create = { ...(a.create as object), orgId };
+          } else {
+            // Reads, updates, deletes, counts, aggregates, groupBy: AND the
+            // org filter in unconditionally — including when no `where` was
+            // passed at all. (Prisma's extended where-unique allows extra
+            // filter fields alongside unique ones on findUnique/update/delete.)
             a.where = { ...((a.where as object) ?? {}), orgId };
           }
 
