@@ -33,13 +33,21 @@ export default async function OutstandingPage() {
 
   return (
     <div>
-      <div className="mb-5">
-        <h1 className="font-display text-2xl font-semibold">Outstanding items</h1>
-        <p className="text-muted text-sm mt-1">
+      <div className="mb-6">
+        <h1 className="font-display text-3xl font-bold text-ink">Outstanding items</h1>
+        <p className="text-muted text-sm mt-2 leading-relaxed max-w-2xl">
           Everything still owed to the branches, including requirements placed for out-of-stock
           products. Fulfil a line once stock lands — the delivery is timestamped and the branch sees
           it immediately.
         </p>
+        {rows.length > 0 && (
+          <div className="mt-4">
+            <div className="glass-surface rounded-xl px-4 py-2.5 inline-flex items-center gap-2 animate-scale-in">
+              <span className="w-2 h-2 rounded-full bg-low animate-pulse-soft" />
+              <span className="text-xs text-low font-semibold">{rows.length} item{rows.length !== 1 ? "s" : ""} outstanding</span>
+            </div>
+          </div>
+        )}
       </div>
       <OutstandingTable rows={rows} />
     </div>
