@@ -31,6 +31,8 @@ model Org {
   authCodes   AuthorizationCode[]
   auditLog    AuditLogEntry[]
   movements   StockMovement[]
+  addresses   Address[]
+  apiKeys     ApiKey[]
 }
 
 enum LocationType {
@@ -48,6 +50,7 @@ model Location {
 
   memberships Membership[]
   orders      Order[]
+  addresses   Address[]
 
   @@index([orgId, type])
 }
@@ -57,10 +60,40 @@ model User {
   email        String   @unique
   passwordHash String
   name         String
+  phone        String?
   mustChangePassword Boolean @default(false)
   createdAt    DateTime @default(now())
+  updatedAt    DateTime @default(now()) @updatedAt
 
   memberships Membership[]
+}
+
+// Shipping/delivery addresses. Scoped to an org; optionally pinned to a
+// branch so a Purchase Manager manages their own branch's address book.
+model Address {
+  id          String   @id @default(cuid())
+  orgId       String
+  org         Org      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  locationId  String?
+  location    Location? @relation(fields: [locationId], references: [id])
+  label       String // e.g. "Salon front desk", "Service entrance"
+  contactName String?
+  phone       String?
+  line1       String
+  line2       String?
+  city        String
+  state       String?
+  postalCode  String?
+  country     String   @default("India")
+  isDefault   Boolean  @default(false)
+  isActive    Boolean  @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  orders Order[]
+
+  @@index([orgId, locationId])
 }
 
 enum Role {
@@ -156,6 +189,9 @@ model Order {
   status         OrderStatus @default(PENDING)
   authCodeId     String?
   authCode       AuthorizationCode? @relation(fields: [authCodeId], references: [id])
+  shipToAddressId String?
+  shipToAddress   Address? @relation(fields: [shipToAddressId], references: [id])
+  deliveryNote    String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -234,6 +270,24 @@ model AuthorizationCode {
   orders Order[]
 
   @@index([orgId, isActive])
+}
+
+// Machine-to-machine access for the versioned REST API (integrations,
+// reporting tools, ERP sync). The raw key is shown once at creation; only
+// its hash is stored. `prefix` (first 8 chars) enables fast lookup + display.
+model ApiKey {
+  id              String    @id @default(cuid())
+  orgId           String
+  org             Org       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  name            String
+  prefix          String    @unique
+  keyHash         String
+  createdByUserId String
+  lastUsedAt      DateTime?
+  revokedAt       DateTime?
+  createdAt       DateTime  @default(now())
+
+  @@index([orgId])
 }
 
 model AuditLogEntry {
