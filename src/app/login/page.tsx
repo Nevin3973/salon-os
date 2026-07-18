@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
+import { VelvetLogo } from "@/components/velvet-logo";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -26,48 +27,73 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-6 py-16 text-center">
-      <div className="font-display text-4xl tracking-[0.2em]">
-        AMARA
-        <small className="block text-xs tracking-[0.34em] text-gold mt-2 font-sans">
-          CENTRAL SUPPLY
-        </small>
+    <div className="min-h-screen grid lg:grid-cols-2">
+      {/* Brand panel */}
+      <div className="hidden lg:flex flex-col justify-between p-12 bg-velvet text-white">
+        <VelvetLogoWhite />
+        <div>
+          <h2 className="font-display text-4xl font-semibold leading-tight max-w-md">
+            Supply your salons, beautifully.
+          </h2>
+          <p className="text-white/70 mt-4 max-w-md">
+            Order supplies, track every dispatch and delivery, and never lose sight of what’s
+            pending — all in one place.
+          </p>
+        </div>
+        <p className="text-white/50 text-sm">Velvet · Salon Supply Management</p>
       </div>
 
-      <form onSubmit={onSubmit} className="mt-14 w-full max-w-sm text-left">
-        <label className="block mb-6">
-          <span className="block text-[11px] tracking-[0.18em] uppercase text-faint mb-2">Email</span>
-          <input
-            type="email"
-            required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="w-full bg-transparent border-b border-line focus:border-gold outline-none py-2 text-ink"
-            placeholder="you@yourcompany.com"
-          />
-        </label>
-        <label className="block mb-2">
-          <span className="block text-[11px] tracking-[0.18em] uppercase text-faint mb-2">Password</span>
-          <input
-            type="password"
-            required
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full bg-transparent border-b border-line focus:border-gold outline-none py-2 text-ink"
-            placeholder="••••••••"
-          />
-        </label>
+      {/* Form panel */}
+      <div className="flex flex-col items-center justify-center px-6 py-16">
+        <div className="w-full max-w-sm">
+          <div className="lg:hidden mb-8 flex justify-center">
+            <VelvetLogo subtitle="Salon Supply" />
+          </div>
+          <h1 className="font-display text-2xl font-semibold">Sign in</h1>
+          <p className="text-muted text-sm mt-1">Welcome back. Enter your details to continue.</p>
 
-        {error && <p className="text-red text-xs mt-4">{error}</p>}
+          <form onSubmit={onSubmit} className="mt-8">
+            <label className="block mb-5">
+              <span className="block text-xs font-medium text-muted mb-1.5">Email</span>
+              <input
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full bg-surface border border-line rounded-lg px-3 h-11 text-sm focus:border-velvet outline-none"
+                placeholder="you@yoursalon.com"
+              />
+            </label>
+            <label className="block mb-2">
+              <span className="block text-xs font-medium text-muted mb-1.5">Password</span>
+              <input
+                type="password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full bg-surface border border-line rounded-lg px-3 h-11 text-sm focus:border-velvet outline-none"
+                placeholder="••••••••"
+              />
+            </label>
 
-        <button
-          type="submit"
-          disabled={pending}
-          className="mt-8 w-full rounded-full border border-gold bg-gold text-black py-3 text-xs tracking-[0.12em] uppercase hover:bg-[var(--color-gold-hover)] hover:border-[var(--color-gold-hover)] transition-colors disabled:opacity-50"
-        >
-          {pending ? "Signing in…" : "Sign in"}
-        </button>
-      </form>
+            {error && <p className="text-out text-sm mt-3">{error}</p>}
+
+            <button
+              type="submit"
+              disabled={pending}
+              className="mt-6 w-full h-11 rounded-lg bg-velvet text-white text-sm font-semibold hover:bg-velvet-dark transition-colors disabled:opacity-60"
+            >
+              {pending ? "Signing in…" : "Sign in"}
+            </button>
+          </form>
+        </div>
+      </div>
     </div>
+  );
+}
+
+function VelvetLogoWhite() {
+  return (
+    <span className="font-display text-2xl font-semibold tracking-tight text-white">Velvet</span>
   );
 }

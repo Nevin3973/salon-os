@@ -1,23 +1,23 @@
 import type { Metadata } from "next";
-import { Marcellus, Jost } from "next/font/google";
+import { Fraunces, Inter } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
 
-const marcellus = Marcellus({
-  variable: "--font-marcellus",
-  weight: "400",
+const fraunces = Fraunces({
+  variable: "--font-fraunces",
+  weight: ["400", "500", "600"],
   subsets: ["latin"],
 });
 
-const jost = Jost({
-  variable: "--font-jost",
-  weight: ["300", "400", "500"],
+const inter = Inter({
+  variable: "--font-inter",
+  weight: ["300", "400", "500", "600", "700"],
   subsets: ["latin"],
 });
 
 export const metadata: Metadata = {
-  title: "AMARA Central Supply",
-  description: "Multi-branch procurement for salon groups",
+  title: "Velvet — Salon Supply",
+  description: "Order, track and manage supplies for your salon — powered by Velvet",
 };
 
 export default function RootLayout({
@@ -27,7 +27,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${marcellus.variable} ${jost.variable} antialiased font-sans font-light`}>
+      <body className={`${fraunces.variable} ${inter.variable} antialiased font-sans`}>
         <Providers>{children}</Providers>
       </body>
     </html>

@@ -192,8 +192,25 @@ async function seedOrg(opts: {
   return { org, branches, warehouse, products };
 }
 
+async function reset() {
+  // Dev-only: clear all rows so the seed is re-runnable. Order matters for FKs.
+  await prisma.orderItemDelivery.deleteMany();
+  await prisma.orderItem.deleteMany();
+  await prisma.order.deleteMany();
+  await prisma.cartItem.deleteMany();
+  await prisma.stockMovement.deleteMany();
+  await prisma.auditLogEntry.deleteMany();
+  await prisma.authorizationCode.deleteMany();
+  await prisma.product.deleteMany();
+  await prisma.membership.deleteMany();
+  await prisma.location.deleteMany();
+  await prisma.user.deleteMany();
+  await prisma.org.deleteMany();
+}
+
 async function main() {
   console.log(`Seeding — all demo users share the password: ${DEMO_PASSWORD}\n`);
+  await reset();
 
   console.log("Org: Amara");
   await seedOrg({

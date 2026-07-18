@@ -21,6 +21,7 @@ model Org {
   id        String   @id @default(cuid())
   name      String
   slug      String   @unique
+  orderSeq  Int      @default(0) // per-org order number counter, bumped atomically in placeOrder
   createdAt DateTime @default(now())
 
   locations   Location[]
@@ -107,6 +108,7 @@ model Product {
 
   orderItems OrderItem[]
   movements  StockMovement[]
+  cartItems  CartItem[]
 
   @@unique([orgId, sku])
   @@index([orgId, active, category])
@@ -147,6 +149,7 @@ model Order {
   id             String      @id @default(cuid())
   orgId          String
   org            Org         @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  orderNo        Int
   branchId       String
   branch         Location    @relation(fields: [branchId], references: [id])
   placedByUserId String
@@ -159,6 +162,7 @@ model Order {
 
   items OrderItem[]
 
+  @@unique([orgId, orderNo])
   @@index([orgId, branchId, status])
   @@index([orgId, status])
 }
@@ -192,6 +196,23 @@ model OrderItemDelivery {
   createdAt          DateTime  @default(now())
 
   @@index([orderItemId])
+}
+
+// DB-backed cart: survives refresh/re-login, one draft cart per user per org.
+model CartItem {
+  id        String  @id @default(cuid())
+  orgId     String
+  userId    String
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  qty       Int
+  note      String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([orgId, userId, productId])
+  @@index([orgId, userId])
 }
 
 // ————————————————————————————————————————————————————————

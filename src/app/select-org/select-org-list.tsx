@@ -21,16 +21,16 @@ export function SelectOrgList({ memberships }: { memberships: MembershipSummary[
   }
 
   return (
-    <div className="grid gap-px bg-line border border-line mt-14 w-full max-w-2xl" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
+    <div className="grid gap-3 mt-8 w-full max-w-lg" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
       {memberships.map((m) => (
         <button
           key={m.orgId}
           onClick={() => choose(m.orgId)}
-          className="bg-card hover:bg-[#1a1a1a] transition-colors text-left p-8"
+          className="bg-surface border border-line rounded-xl p-5 text-left hover:border-velvet hover:shadow-[0_2px_16px_rgba(27,22,38,0.08)] transition-all"
         >
-          <span className="block text-[11px] tracking-[0.22em] uppercase text-faint">{m.orgName}</span>
-          <div className="font-display text-xl mt-2">{ROLE_LABEL[m.role] ?? m.role}</div>
-          {m.locationName && <div className="text-faint text-sm mt-1">{m.locationName}</div>}
+          <div className="font-medium">{m.orgName}</div>
+          <div className="text-sm text-velvet mt-1">{ROLE_LABEL[m.role] ?? m.role}</div>
+          {m.locationName && <div className="text-xs text-faint mt-0.5">{m.locationName}</div>}
         </button>
       ))}
     </div>

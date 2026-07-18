@@ -111,4 +111,18 @@ export async function requireScopedSession(role?: Role) {
   return { session, db: getScopedDb(session.orgId) };
 }
 
+/** Active org name for chrome, resolved from the session's memberships. */
+export async function activeOrgName(): Promise<string> {
+  const session = await auth();
+  const m = session?.memberships.find((x) => x.orgId === session.activeOrgId);
+  return m?.orgName ?? "";
+}
+
+/** Active location (branch/warehouse) name for chrome. */
+export async function activeLocationName(): Promise<string | null> {
+  const session = await auth();
+  const m = session?.memberships.find((x) => x.orgId === session.activeOrgId);
+  return m?.locationName ?? null;
+}
+
 export { Prisma };
