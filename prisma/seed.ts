@@ -20,7 +20,7 @@ type ProductSeed = {
 };
 
 // Ported from reference/salon-procurement-v6.jsx SEED_PRODUCTS.
-function amaraProducts(): ProductSeed[] {
+function beyondProducts(): ProductSeed[] {
   let n = 0;
   const P = (
     name: string,
@@ -242,11 +242,11 @@ async function main() {
   console.log(`Seeding — all demo users share the password: ${DEMO_PASSWORD}\n`);
   await reset();
 
-  console.log("Org: Amara");
+  console.log("Org: Beyond Demands");
   await seedOrg({
-    name: "Amara",
-    slug: "amara",
-    products: amaraProducts(),
+    name: "Beyond Demands",
+    slug: "beyond",
+    products: beyondProducts(),
     branchNames: ["Rosewood Avenue", "Marina Walk", "Palm District"],
     warehouseName: "Central Warehouse",
     pmNames: ["Leila M.", "Sara N.", "Huda K."],

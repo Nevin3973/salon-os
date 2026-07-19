@@ -12,6 +12,8 @@ export default defineConfig({
   },
   engine: "classic",
   datasource: {
-    url: env("DATABASE_URL"),
+    // CLI operations (migrate, db execute) run as the database owner;
+    // the app itself connects with the restricted DATABASE_URL role.
+    url: env("DIRECT_URL"),
   },
 });
