@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { requireSession } from "@/lib/tenant";
+import { requireSession, setOrgConfig, withOrg } from "@/lib/tenant";
 import { logAudit } from "@/lib/audit";
 import { orderCode } from "@/lib/format";
 
@@ -18,6 +18,7 @@ export async function adjustStock(input: { productId: string; delta: number }): 
 
   try {
     await prisma.$transaction(async (tx) => {
+      await setOrgConfig(tx, session.orgId);
       await tx.$queryRaw`SELECT id FROM "Product" WHERE id = ${productId} AND "orgId" = ${session.orgId} FOR UPDATE`;
       const p = await tx.product.findFirst({ where: { id: productId, orgId: session.orgId } });
       if (!p) throw new Error("NOT_FOUND");
@@ -56,9 +57,13 @@ export async function setMinStock(input: { productId: string; minStock: number }
     .object({ productId: z.string().min(1), minStock: z.number().int().min(0).max(1_000_000) })
     .parse(input);
   const session = await requireSession("WAREHOUSE_MANAGER");
-  const p = await prisma.product.findFirst({ where: { id: productId, orgId: session.orgId } });
-  if (!p) return { ok: false, error: "Product not found." };
-  await prisma.product.update({ where: { id: p.id }, data: { minStock } });
+  const found = await withOrg(session.orgId, async (tx) => {
+    const p = await tx.product.findFirst({ where: { id: productId, orgId: session.orgId } });
+    if (!p) return false;
+    await tx.product.update({ where: { id: p.id }, data: { minStock } });
+    return true;
+  });
+  if (!found) return { ok: false, error: "Product not found." };
   revalidatePath("/warehouse/inventory");
   return { ok: true };
 }
@@ -74,6 +79,7 @@ export async function fulfilOutstanding(input: { orderItemId: string }): Promise
 
   try {
     await prisma.$transaction(async (tx) => {
+      await setOrgConfig(tx, session.orgId);
       await tx.$queryRaw`SELECT id FROM "OrderItem" WHERE id = ${orderItemId} FOR UPDATE`;
       const item = await tx.orderItem.findFirst({
         where: { id: orderItemId, order: { orgId: session.orgId } },
@@ -177,7 +183,9 @@ export async function previewImport(input: {
 }): Promise<ImportPreview> {
   const { rows, mode } = previewSchema.parse(input);
   const session = await requireSession("WAREHOUSE_MANAGER");
-  const products = await prisma.product.findMany({ where: { orgId: session.orgId } });
+  const products = await withOrg(session.orgId, (tx) =>
+    tx.product.findMany({ where: { orgId: session.orgId } })
+  );
   const bySku = new Map(products.map((p) => [p.sku, p]));
 
   const valid: PreviewRow[] = [];
@@ -225,6 +233,7 @@ export async function confirmImport(input: {
 
   try {
     const summary = await prisma.$transaction(async (tx) => {
+      await setOrgConfig(tx, session.orgId);
       const products = await tx.product.findMany({ where: { orgId: session.orgId } });
       const bySku = new Map(products.map((p) => [p.sku, p]));
       let updated = 0,

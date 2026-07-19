@@ -1,24 +1,28 @@
 import type { Prisma } from "@prisma/client";
-import { prisma } from "@/lib/db";
+import { withOrg } from "@/lib/tenant";
 
 /**
  * Reserved quantity per product for an org = sum of (requestedQty - deliveredQty)
  * across all OrderItems whose parent Order is still PENDING or PROCESSING.
  * Derived live (not a maintained counter) — see the plan's rationale.
  *
- * Accepts an optional transaction client so callers inside a locked
- * transaction get a consistent read.
+ * Pass the transaction client when calling from inside a locked transaction
+ * (which must already carry the RLS org context) for a consistent read;
+ * otherwise a fresh org-scoped transaction is opened.
  */
 export async function reservedByProduct(
   orgId: string,
-  client: Prisma.TransactionClient | typeof prisma = prisma
+  client?: Prisma.TransactionClient
 ): Promise<Map<string, number>> {
-  const rows = await client.orderItem.findMany({
-    where: {
-      order: { orgId, status: { in: ["PENDING", "PROCESSING"] } },
-    },
-    select: { productId: true, requestedQty: true, deliveredQty: true },
-  });
+  const query = (tx: Prisma.TransactionClient) =>
+    tx.orderItem.findMany({
+      where: {
+        order: { orgId, status: { in: ["PENDING", "PROCESSING"] } },
+      },
+      select: { productId: true, requestedQty: true, deliveredQty: true },
+    });
+
+  const rows = client ? await query(client) : await withOrg(orgId, query);
 
   const map = new Map<string, number>();
   for (const r of rows) {

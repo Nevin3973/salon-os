@@ -4,9 +4,10 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { requireSession } from "@/lib/tenant";
+import { requireSession, setOrgConfig } from "@/lib/tenant";
 import { logAudit } from "@/lib/audit";
 import { orderCode, fmtDate } from "@/lib/format";
+import { allocateDispatch } from "@/lib/allocation";
 
 export type DispatchResult = { ok: true } | { ok: false; error: string; itemId?: string };
 
@@ -16,6 +17,7 @@ export async function startProcessing(input: { orderId: string }): Promise<Dispa
 
   try {
     await prisma.$transaction(async (tx) => {
+      await setOrgConfig(tx, session.orgId);
       await tx.$queryRaw`SELECT id FROM "Order" WHERE id = ${orderId} AND "orgId" = ${session.orgId} FOR UPDATE`;
       const order = await tx.order.findFirst({ where: { id: orderId, orgId: session.orgId } });
       if (!order) throw new Error("NOT_FOUND");
@@ -73,6 +75,7 @@ export async function applyDispatch(input: {
 
   try {
     await prisma.$transaction(async (tx) => {
+      await setOrgConfig(tx, session.orgId);
       await tx.$queryRaw`SELECT id FROM "Order" WHERE id = ${orderId} AND "orgId" = ${session.orgId} FOR UPDATE`;
 
       const order = await tx.order.findFirst({
@@ -91,16 +94,18 @@ export async function applyDispatch(input: {
       const products = await tx.product.findMany({ where: { id: { in: productIds }, orgId: session.orgId } });
       const origStock = new Map(products.map((p) => [p.id, p.stock]));
 
-      // 1. Pure allocation pass (running per-product stock so shared products are safe).
-      const running = new Map(origStock);
-      const alloc = order.items.map((it) => {
-        const inp = lineMap.get(it.id);
-        const remaining = it.requestedQty - it.deliveredQty;
-        const avail = running.get(it.productId) ?? 0;
-        const q = Math.max(0, Math.min(inp?.dispatch ?? 0, remaining, avail));
-        running.set(it.productId, avail - q);
-        return { it, q, remainingAfter: remaining - q };
-      });
+      // 1. Pure allocation pass — see lib/allocation.ts (unit-tested).
+      const itemById = new Map(order.items.map((it) => [it.id, it]));
+      const alloc = allocateDispatch(
+        order.items.map((it) => ({
+          itemId: it.id,
+          productId: it.productId,
+          requestedQty: it.requestedQty,
+          deliveredQty: it.deliveredQty,
+          requestedDispatch: lineMap.get(it.id)?.dispatch ?? 0,
+        })),
+        origStock
+      ).map((r) => ({ it: itemById.get(r.itemId)!, q: r.qty, remainingAfter: r.remainingAfter }));
 
       // 2. Closing requires a reason for every line that will remain short.
       if (closing) {

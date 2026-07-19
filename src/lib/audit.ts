@@ -1,4 +1,5 @@
-import type { Prisma } from "@prisma/client";
+import type { Prisma, PrismaClient } from "@prisma/client";
+import { withOrg } from "@/lib/tenant";
 
 type AuditInput = {
   orgId: string;
@@ -11,11 +12,23 @@ type AuditInput = {
 };
 
 /**
- * Writes an audit entry. Takes a Prisma client/transaction handle so callers
- * can log inside the same transaction as the mutation being recorded —
- * an audit entry should never exist for a mutation that got rolled back.
+ * Writes an audit entry. Pass the transaction handle when logging inside a
+ * mutation's transaction (an audit entry should never exist for a mutation
+ * that rolled back). When handed the root client instead, it opens its own
+ * org-scoped transaction so the write passes row-level security.
  */
 export async function logAudit(
+  client: Prisma.TransactionClient | PrismaClient,
+  input: AuditInput
+) {
+  const isRootClient = typeof (client as PrismaClient).$transaction === "function";
+  if (isRootClient) {
+    return withOrg(input.orgId, (tx) => write(tx, input));
+  }
+  return write(client as Prisma.TransactionClient, input);
+}
+
+async function write(
   tx: Prisma.TransactionClient,
   { orgId, userId, userName, action, entityType, entityId, metadata }: AuditInput
 ) {

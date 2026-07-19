@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/db";
-import { requireSession, requireScopedSession } from "@/lib/tenant";
+import { requireSession, requireScopedSession, withOrg } from "@/lib/tenant";
 import { logAudit } from "@/lib/audit";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
@@ -162,13 +162,13 @@ export async function setDefaultAddress(input: { addressId: string }): Promise<A
 }
 
 async function setDefaultInternal(orgId: string, locationId: string, addressId: string) {
-  await prisma.$transaction([
-    prisma.address.updateMany({
+  await withOrg(orgId, async (tx) => {
+    await tx.address.updateMany({
       where: { orgId, locationId },
       data: { isDefault: false },
-    }),
-    prisma.address.update({ where: { id: addressId }, data: { isDefault: true } }),
-  ]);
+    });
+    await tx.address.update({ where: { id: addressId }, data: { isDefault: true } });
+  });
 }
 
 export async function removeAddress(input: { addressId: string }): Promise<ActionResult> {

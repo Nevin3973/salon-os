@@ -6,7 +6,7 @@ import bcrypt from "bcryptjs";
 import { randomBytes, randomInt } from "node:crypto";
 import { Role } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { requireScopedSession } from "@/lib/tenant";
+import { requireScopedSession, withOrg } from "@/lib/tenant";
 import { logAudit } from "@/lib/audit";
 
 export type AdminResult<T = undefined> =
@@ -69,16 +69,18 @@ export async function createProduct(input: {
     data: { ...parsed.data, orgId: session.orgId },
   });
   if (parsed.data.stock > 0) {
-    await prisma.stockMovement.create({
-      data: {
-        orgId: session.orgId,
-        productId: product.id,
-        userId: session.userId,
-        prevQty: 0,
-        newQty: parsed.data.stock,
-        action: "New product",
-      },
-    });
+    await withOrg(session.orgId, (tx) =>
+      tx.stockMovement.create({
+        data: {
+          orgId: session.orgId,
+          productId: product.id,
+          userId: session.userId,
+          prevQty: 0,
+          newQty: parsed.data.stock,
+          action: "New product",
+        },
+      })
+    );
   }
   await logAudit(prisma, {
     orgId: session.orgId,

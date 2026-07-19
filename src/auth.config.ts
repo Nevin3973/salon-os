@@ -74,7 +74,7 @@ export const authConfig: NextAuthConfig = {
       if (isPublic) return true;
       if (!isLoggedIn) return false;
 
-      if (pathname.startsWith("/select-org")) return true;
+      if (pathname.startsWith("/select-org") || pathname.startsWith("/change-password")) return true;
       if (!auth?.activeOrgId) return false; // must pick an org first
 
       if (pathname.startsWith("/purchase-manager") && auth.activeRole !== "PURCHASE_MANAGER") return false;
