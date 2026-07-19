@@ -1,7 +1,11 @@
 import { PrismaClient, LocationType, Role } from "@prisma/client";
 import bcrypt from "bcryptjs";
 
-const prisma = new PrismaClient();
+// The seed writes without an org context, so it must use the owner
+// connection (DIRECT_URL) — the app role would be blocked by RLS.
+const prisma = new PrismaClient({
+  datasourceUrl: process.env.DIRECT_URL ?? process.env.DATABASE_URL,
+});
 
 const DEMO_PASSWORD = "password123";
 
@@ -189,16 +193,18 @@ async function seedOrg(opts: {
     });
   }
 
-  // Branch-scoped authorization codes, matching the prototype's ROSE-4821 style.
+  // Branch-scoped authorization codes. The plaintext goes to the console
+  // only; the DB stores a hash and a masked label.
   for (const branch of branches) {
-    const raw = `${branch.name.slice(0, 4).toUpperCase().replace(/[^A-Z]/g, "")}-${Math.floor(1000 + Math.random() * 9000)}`;
+    const prefix = branch.name.slice(0, 4).toUpperCase().replace(/[^A-Z]/g, "");
+    const raw = `${prefix}-${Math.floor(1000 + Math.random() * 9000)}`;
     const codeHash = await bcrypt.hash(raw, 10);
     await prisma.authorizationCode.create({
       data: {
         orgId: org.id,
         locationId: branch.id,
         codeHash,
-        label: raw, // demo only: real deployments should not store the plaintext anywhere
+        label: `${prefix}-••••`,
         createdByUserId: adminUser.id,
       },
     });
@@ -225,6 +231,14 @@ async function reset() {
 }
 
 async function main() {
+  // This seed wipes data and creates weak demo accounts — dev machines only.
+  const dbUrl = process.env.DATABASE_URL ?? "";
+  if (process.env.NODE_ENV === "production" || !/localhost|127\.0\.0\.1/.test(dbUrl)) {
+    throw new Error(
+      "Refusing to seed: this looks like a non-local database. The demo seed is for development only."
+    );
+  }
+
   console.log(`Seeding — all demo users share the password: ${DEMO_PASSWORD}\n`);
   await reset();
 

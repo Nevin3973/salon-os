@@ -97,9 +97,22 @@ changes only within v1 — breaking changes get `/api/v2`.
 
 - Shared schema, `orgId` on every tenant table; app-layer scoping via the
   Prisma extension in `tenant.ts` (see rule 2 above).
-- Defense in depth (planned, pre-GA): Postgres **Row-Level Security** policies
-  (`org_id = current_setting('app.org_id')`) so an app bug cannot cross
-  tenants; login/checkout rate limiting; secrets via platform env vars.
+- **Postgres Row-Level Security (implemented)**: fail-closed policies on every
+  tenant table (`prisma/migrations/*_rls`) checked against `app.org_id`, which
+  `withOrg`/`getScopedDb` set per transaction. The app connects as the
+  non-privileged `salonos_app` role (`scripts/provision-app-role.sql`) because
+  owners/superusers bypass RLS; migrations and the dev seed use the owner
+  connection (`DIRECT_URL`). Deliberately exempt: `User`, `Membership`, `Org`
+  (needed at login before an org context exists) and `ApiKey` (looked up by
+  prefix to discover the org). Covered by integration tests in `tests/rls.test.ts`.
+- **Rate limiting (implemented)**: sliding-window limiter (`lib/rate-limit.ts`)
+  on login (5/10min per account) and purchase-code attempts (10/10min per
+  user); in-memory per instance — swap the store for Redis when scaling out.
+- **Forced password rotation (implemented)**: users created with a one-time
+  password are gated to `/change-password` (checked against the DB, not the
+  JWT) until they set their own.
+- Security response headers set in `next.config.ts` (frame-deny, nosniff,
+  referrer policy, permissions policy).
 - Passwords: bcrypt (cost 10+); purchase authorization codes: bcrypt, rotation
   invalidates immediately; API keys: SHA-256 (high-entropy input, no need for
   slow hashing on every request).

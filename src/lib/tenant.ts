@@ -16,18 +16,45 @@ const SCOPED_MODELS = [
   "product",
   "stockMovement",
   "order",
+  "cartItem",
+  "address",
   "authorizationCode",
   "auditLogEntry",
   "membership",
 ] as const;
 
 /**
- * Returns a Prisma client scoped to a single org: every read on a
- * tenant-scoped model gets `orgId` AND-ed into its `where`, and every create
- * gets `orgId` stamped into its `data`. `orgId` must come from the caller's
- * server-side session — never from client input or a URL param — so this
- * function's own contract requires an explicit orgId argument rather than
- * reading one implicitly, to keep that requirement visible at every call site.
+ * Runs `fn` inside a transaction whose Postgres session carries the caller's
+ * org (`app.org_id`). The database's row-level-security policies check that
+ * setting, so even a query with a missing/buggy org filter cannot see or
+ * write another tenant's rows. Every manual transaction that touches tenant
+ * tables must go through this (or replicate the set_config line).
+ */
+export async function withOrg<T>(
+  orgId: string,
+  fn: (tx: Prisma.TransactionClient) => Promise<T>
+): Promise<T> {
+  return prisma.$transaction(async (tx) => {
+    await setOrgConfig(tx, orgId);
+    return fn(tx);
+  });
+}
+
+/** Sets the RLS org context on an already-open transaction. */
+export async function setOrgConfig(tx: Prisma.TransactionClient, orgId: string) {
+  await tx.$executeRaw`SELECT set_config('app.org_id', ${orgId}, true)`;
+}
+
+/**
+ * Returns a Prisma client scoped to a single org, enforced twice:
+ *  1. App layer — every read gets `orgId` AND-ed into its `where`; every
+ *     create gets `orgId` stamped into its data.
+ *  2. Database layer — the operation is re-dispatched inside a transaction
+ *     that sets `app.org_id`, which Postgres RLS policies verify. If layer 1
+ *     ever has a bug, layer 2 still returns nothing rather than leaking.
+ *
+ * `orgId` must come from the caller's server-side session — never from
+ * client input or a URL param.
  */
 export function getScopedDb(orgId: string) {
   return prisma.$extends({
@@ -59,7 +86,11 @@ export function getScopedDb(orgId: string) {
             a.where = { ...((a.where as object) ?? {}), orgId };
           }
 
-          return query(a as never);
+          // Re-dispatch on a transaction that carries the RLS org context.
+          return withOrg(orgId, async (tx) => {
+            const delegate = (tx as unknown as Record<string, Record<string, (args: unknown) => Promise<unknown>>>)[modelKey];
+            return delegate[operation](a);
+          });
         },
       },
     },
