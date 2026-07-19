@@ -1,4 +1,4 @@
-// AMARA Central Supply — multi-tenant schema
+// Salon OS — multi-tenant schema
 // See C:\Users\NM\.claude\plans\vectorized-prancing-meteor.md for the design rationale.
 
 generator client {
