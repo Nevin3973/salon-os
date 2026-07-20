@@ -136,7 +136,7 @@ export function ImportWizard() {
               <path d="M20 6L9 17l-5-5" />
             </svg>
           </div>
-          <h2 className="font-display text-xl font-bold text-ink">Import complete</h2>
+          <h2 className="text-xl font-semibold text-ink">Import complete</h2>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {([
@@ -147,7 +147,7 @@ export function ImportWizard() {
           ] as const).map(([label, n, textColor, bgColor]) => (
             <div key={label} className={`${bgColor} border border-line-soft rounded-xl p-4 animate-slide-up`}>
               <div className="text-[11px] uppercase tracking-wider text-faint font-medium">{label}</div>
-              <div className={`font-display text-3xl font-bold mt-1 tabular-nums ${textColor}`}>{n}</div>
+              <div className={`text-2xl font-semibold mt-1 tabular-nums ${textColor}`}>{n}</div>
             </div>
           ))}
         </div>

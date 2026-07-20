@@ -78,7 +78,7 @@ export default async function OverviewPage() {
       <p className="text-[11px] uppercase tracking-[0.14em] text-faint font-medium">
         Head office · {fmtDate(new Date())}
       </p>
-      <h1 className="font-display text-3xl mt-1">Overview</h1>
+      <h1 className="text-2xl font-semibold mt-1">Overview</h1>
 
       {/* KPI row */}
       <div className="grid gap-px bg-line border border-line rounded-[10px] overflow-hidden mt-6"
@@ -86,7 +86,7 @@ export default async function OverviewPage() {
         {kpis.map(([label, n]) => (
           <div key={label} className="bg-surface p-5">
             <div className="text-[11px] uppercase tracking-[0.12em] text-faint font-medium">{label}</div>
-            <div className="font-display text-3xl mt-2 tabular-nums">{n}</div>
+            <div className="text-2xl font-semibold mt-2 tabular-nums">{n}</div>
           </div>
         ))}
       </div>

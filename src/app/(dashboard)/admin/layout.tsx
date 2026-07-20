@@ -8,7 +8,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   return (
     <div className="theme-analytics bg-bg text-ink min-h-screen">
       <OpsShell
-        brand="Salon OS"
+        brand="Beyond Demands"
         subtitle="Head office"
         userName={session.name}
         orgName={orgName}

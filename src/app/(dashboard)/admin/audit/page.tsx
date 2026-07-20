@@ -26,7 +26,7 @@ export default async function AdminAuditPage({
 
   return (
     <div>
-      <h1 className="font-display text-3xl">Audit log</h1>
+      <h1 className="text-2xl font-semibold">Audit log</h1>
       <p className="text-muted text-sm mt-1 max-w-xl">
         Everything that happens in this workspace, newest first.
       </p>

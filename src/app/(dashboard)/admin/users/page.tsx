@@ -23,7 +23,7 @@ export default async function AdminUsersPage() {
 
   return (
     <div>
-      <h1 className="font-display text-3xl">Team</h1>
+      <h1 className="text-2xl font-semibold">Team</h1>
       <p className="text-muted text-sm mt-1 max-w-xl">
         Everyone with access to this workspace. New people get a one-time password to sign in
         and must change it right away.

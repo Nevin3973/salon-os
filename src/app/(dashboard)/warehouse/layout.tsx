@@ -20,7 +20,7 @@ export default async function WarehouseLayout({ children }: { children: React.Re
   return (
     <div className="theme-ops bg-bg text-ink min-h-screen">
       <OpsShell
-        brand="Salon OS"
+        brand="Beyond Demands"
         subtitle="Warehouse"
         userName={session.name}
         orgName={orgName}

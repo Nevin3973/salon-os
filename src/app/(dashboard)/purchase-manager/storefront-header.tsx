@@ -47,7 +47,7 @@ export function StorefrontHeader({
           {/* Logo */}
           <Link href="/purchase-manager/catalogue" className={`${boxCls} shrink-0`}>
             <span className="text-[22px] font-bold tracking-tight leading-none">
-              Salon<span style={{ color: "var(--color-cta)" }}>OS</span>
+              Beyond<span style={{ color: "var(--color-cta)" }}> Demands</span>
             </span>
           </Link>
 

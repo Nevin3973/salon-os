@@ -1,5 +1,6 @@
 import { PrismaClient, LocationType, Role } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { productImageUrl } from "../src/lib/product-image";
 
 // The seed writes without an org context, so it must use the owner
 // connection (DIRECT_URL) — the app role would be blocked by RLS.
@@ -137,11 +138,16 @@ async function seedOrg(opts: {
   });
 
   const products = await Promise.all(
-    opts.products.map((p) => prisma.product.create({ data: { ...p, orgId: org.id } }))
+    opts.products.map((p) =>
+      prisma.product.create({
+        data: { ...p, orgId: org.id, imageUrl: productImageUrl(p.name, p.category) },
+      })
+    )
   );
 
   const passwordHash = await bcrypt.hash(DEMO_PASSWORD, 10);
 
+  const pmUsers = [];
   for (let i = 0; i < branches.length; i++) {
     const email = `${opts.pmNames[i].toLowerCase().replace(/[^a-z]/g, ".")}@${opts.slug}.demo`;
     const user = await prisma.user.upsert({
@@ -152,6 +158,7 @@ async function seedOrg(opts: {
     await prisma.membership.create({
       data: { userId: user.id, orgId: org.id, role: Role.PURCHASE_MANAGER, locationId: branches[i].id },
     });
+    pmUsers.push(user);
     console.log(`  PM   ${opts.pmNames[i]} <${email}> — ${branches[i].name}`);
   }
 
@@ -178,19 +185,22 @@ async function seedOrg(opts: {
   console.log(`  ADMIN ${opts.adminName} <${adminEmail}>`);
 
   // A default delivery address per branch so checkout works immediately.
+  const addresses = [];
   for (let i = 0; i < branches.length; i++) {
-    await prisma.address.create({
-      data: {
-        orgId: org.id,
-        locationId: branches[i].id,
-        label: `${branches[i].name} — reception`,
-        contactName: opts.pmNames[i],
-        line1: `${10 + i * 4} ${branches[i].name}`,
-        city: "Dubai",
-        country: "United Arab Emirates",
-        isDefault: true,
-      },
-    });
+    addresses.push(
+      await prisma.address.create({
+        data: {
+          orgId: org.id,
+          locationId: branches[i].id,
+          label: `${branches[i].name} — reception`,
+          contactName: opts.pmNames[i],
+          line1: `${10 + i * 4} ${branches[i].name}`,
+          city: "Dubai",
+          country: "United Arab Emirates",
+          isDefault: true,
+        },
+      })
+    );
   }
 
   // Branch-scoped authorization codes. The plaintext goes to the console
@@ -211,7 +221,163 @@ async function seedOrg(opts: {
     console.log(`  CODE ${branch.name}: ${raw}`);
   }
 
-  return { org, branches, warehouse, products };
+  return { org, branches, warehouse, products, pmUsers, wmUser, adminUser, addresses };
+}
+
+type SeededOrg = Awaited<ReturnType<typeof seedOrg>>;
+
+// ————————————————————————————————————————————————————————
+// Sample orders (demo data across statuses, branches and dates)
+// ————————————————————————————————————————————————————————
+
+type OrderLine = { product: string; req: number; del: number; reason?: string; etaDays?: number; note?: string };
+type OrderSpec = {
+  branch: number;
+  daysAgo: number;
+  status: "PENDING" | "PROCESSING" | "COMPLETED" | "PARTIALLY_FULFILLED";
+  lines: OrderLine[];
+};
+
+const SAMPLE_ORDERS: OrderSpec[] = [
+  { branch: 0, daysAgo: 13, status: "COMPLETED", lines: [
+    { product: "Repair Shampoo 1L", req: 20, del: 20 },
+    { product: "Nitrile Gloves M (100)", req: 6, del: 6 },
+  ] },
+  { branch: 1, daysAgo: 11, status: "COMPLETED", lines: [
+    { product: "Hot Wax Beads 1kg — Rose", req: 10, del: 10 },
+  ] },
+  { branch: 2, daysAgo: 9, status: "PARTIALLY_FULFILLED", lines: [
+    { product: "Colour Tube — 6.35 Chestnut", req: 30, del: 30 },
+    { product: "Colour Foil Roll 100m", req: 8, del: 3, reason: "Awaiting supplier", etaDays: 4, note: "urgent — balayage week" },
+  ] },
+  { branch: 0, daysAgo: 6, status: "COMPLETED", lines: [
+    { product: "Moisture Conditioner 1L", req: 15, del: 15 },
+    { product: "Cuticle Oil 15ml", req: 12, del: 12 },
+  ] },
+  { branch: 1, daysAgo: 3, status: "PROCESSING", lines: [
+    { product: "Gel Lacquer — Porcelain Rose", req: 12, del: 6 },
+    { product: "Acetone Remover 1L", req: 8, del: 0 },
+  ] },
+  { branch: 0, daysAgo: 1, status: "PENDING", lines: [
+    { product: "Deep Repair Mask 500g", req: 10, del: 0 },
+    { product: "Sectioning Clips (12)", req: 20, del: 0 },
+  ] },
+  { branch: 2, daysAgo: 0, status: "PENDING", lines: [
+    { product: "Colour Tube — 9.1 Ash Blonde", req: 20, del: 0, note: "out of stock — please supply" },
+    { product: "Post-Wax Soothing Lotion", req: 6, del: 0 },
+  ] },
+];
+
+function daysAgoDate(days: number, hour = 10, minute = 0) {
+  const d = new Date();
+  d.setDate(d.getDate() - days);
+  d.setHours(hour, minute, 0, 0);
+  return d;
+}
+
+async function seedSampleOrders(ctx: SeededOrg) {
+  const byName = new Map(ctx.products.map((p) => [p.name, p]));
+  const stock = new Map(ctx.products.map((p) => [p.id, p.stock]));
+  let orderNo = 0;
+
+  for (const spec of SAMPLE_ORDERS) {
+    orderNo++;
+    const branch = ctx.branches[spec.branch];
+    const pm = ctx.pmUsers[spec.branch];
+    const address = ctx.addresses[spec.branch];
+    const placedAt = daysAgoDate(spec.daysAgo, 9 + spec.branch, 15);
+
+    const order = await prisma.order.create({
+      data: {
+        orgId: ctx.org.id,
+        orderNo,
+        branchId: branch.id,
+        placedByUserId: pm.id,
+        status: spec.status,
+        shipToAddressId: address.id,
+        createdAt: placedAt,
+        items: {
+          create: spec.lines.map((l) => {
+            const p = byName.get(l.product)!;
+            const short = l.req - l.del;
+            return {
+              productId: p.id,
+              requestedQty: l.req,
+              deliveredQty: l.del,
+              note: l.note ?? null,
+              outstandingReason: spec.status === "PARTIALLY_FULFILLED" && short > 0 ? l.reason ?? "Awaiting supplier" : null,
+              outstandingEta:
+                spec.status === "PARTIALLY_FULFILLED" && short > 0 && l.etaDays ? daysAgoDate(-l.etaDays) : null,
+            };
+          }),
+        },
+      },
+      include: { items: true },
+    });
+
+    // Deliveries + stock movements for anything dispatched.
+    const dispatchAt = daysAgoDate(Math.max(0, spec.daysAgo - 1), 11, 30);
+    for (const item of order.items) {
+      const line = spec.lines.find((l) => byName.get(l.product)!.id === item.productId)!;
+      if (line.del > 0) {
+        await prisma.orderItemDelivery.create({
+          data: { orderItemId: item.id, qty: line.del, dispatchedByUserId: ctx.wmUser.id, createdAt: dispatchAt },
+        });
+        const prev = stock.get(item.productId)!;
+        const next = Math.max(0, prev - line.del);
+        stock.set(item.productId, next);
+        await prisma.stockMovement.create({
+          data: {
+            orgId: ctx.org.id,
+            productId: item.productId,
+            userId: ctx.wmUser.id,
+            prevQty: prev,
+            newQty: next,
+            action: `Dispatch · ORD-${String(orderNo).padStart(4, "0")} → ${branch.name}`,
+            refOrderId: order.id,
+            createdAt: dispatchAt,
+          },
+        });
+      }
+    }
+
+    // Audit trail entries.
+    await prisma.auditLogEntry.create({
+      data: {
+        orgId: ctx.org.id,
+        userId: pm.id,
+        userName: pm.name,
+        action: `Placed ORD-${String(orderNo).padStart(4, "0")} (${spec.lines.length} item${spec.lines.length === 1 ? "" : "s"}) from ${branch.name}`,
+        entityType: "Order",
+        entityId: order.id,
+        createdAt: placedAt,
+      },
+    });
+    if (spec.status === "COMPLETED") {
+      await prisma.auditLogEntry.create({
+        data: {
+          orgId: ctx.org.id, userId: ctx.wmUser.id, userName: ctx.wmUser.name,
+          action: `Completed ORD-${String(orderNo).padStart(4, "0")} — all items dispatched in full`,
+          entityType: "Order", entityId: order.id, createdAt: dispatchAt,
+        },
+      });
+    } else if (spec.status === "PARTIALLY_FULFILLED") {
+      await prisma.auditLogEntry.create({
+        data: {
+          orgId: ctx.org.id, userId: ctx.wmUser.id, userName: ctx.wmUser.name,
+          action: `Closed ORD-${String(orderNo).padStart(4, "0")} — items outstanding, awaiting supplier`,
+          entityType: "Order", entityId: order.id, createdAt: dispatchAt,
+        },
+      });
+    }
+  }
+
+  // Persist stock changes and set the order counter so new orders continue.
+  for (const [id, qty] of stock) {
+    await prisma.product.update({ where: { id }, data: { stock: qty } });
+  }
+  await prisma.org.update({ where: { id: ctx.org.id }, data: { orderSeq: orderNo } });
+  console.log(`  ${SAMPLE_ORDERS.length} sample orders created (ORD-0001…ORD-${String(orderNo).padStart(4, "0")})`);
 }
 
 async function reset() {
@@ -245,7 +411,7 @@ async function main() {
   await reset();
 
   console.log("Org: Beyond Demands");
-  await seedOrg({
+  const beyond = await seedOrg({
     name: "Beyond Demands",
     slug: "beyond",
     products: beyondProducts(),
@@ -255,6 +421,7 @@ async function main() {
     wmName: "Omar D.",
     adminName: "A. Rahman",
   });
+  await seedSampleOrders(beyond);
 
   console.log("\nOrg: Bellissima Salon Group");
   await seedOrg({

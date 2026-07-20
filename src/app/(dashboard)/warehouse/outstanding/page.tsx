@@ -34,7 +34,7 @@ export default async function OutstandingPage() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="font-display text-3xl font-bold text-ink">Outstanding items</h1>
+        <h1 className="text-2xl font-semibold text-ink">Outstanding items</h1>
         <p className="text-muted text-sm mt-2 leading-relaxed max-w-2xl">
           Everything still owed to the branches, including requirements placed for out-of-stock
           products. Fulfil a line once stock lands — the delivery is timestamped and the branch sees

@@ -13,7 +13,7 @@ export default async function AdminCodesPage() {
 
   return (
     <div>
-      <h1 className="font-display text-3xl">Purchase codes</h1>
+      <h1 className="text-2xl font-semibold">Purchase codes</h1>
       <p className="text-muted text-sm mt-1 max-w-xl">
         A branch needs its code to place an order. Make a new one any time — revoked codes stop
         working right away.

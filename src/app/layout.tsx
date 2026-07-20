@@ -18,7 +18,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Salon OS",
+  title: "Beyond Demands",
   description: "Order, track and manage salon supplies in one place",
 };
 

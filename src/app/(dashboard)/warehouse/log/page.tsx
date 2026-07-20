@@ -21,7 +21,7 @@ export default async function LogPage() {
   return (
     <div>
       <div className="mb-4">
-        <h1 className="font-display text-2xl font-semibold">Inventory log</h1>
+        <h1 className="text-2xl font-semibold">Inventory log</h1>
         <p className="text-muted text-sm mt-1">
           Every stock movement — dispatches, adjustments, imports and outstanding fulfilments — with
           previous and new levels.

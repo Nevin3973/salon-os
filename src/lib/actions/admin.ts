@@ -8,6 +8,7 @@ import { Role } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { requireScopedSession, withOrg } from "@/lib/tenant";
 import { logAudit } from "@/lib/audit";
+import { productImageUrl } from "@/lib/product-image";
 
 export type AdminResult<T = undefined> =
   | { ok: true; data?: T }
@@ -66,7 +67,11 @@ export async function createProduct(input: {
   if (existing) return { ok: false, error: `SKU ${parsed.data.sku} already exists.` };
 
   const product = await db.product.create({
-    data: { ...parsed.data, orgId: session.orgId },
+    data: {
+      ...parsed.data,
+      orgId: session.orgId,
+      imageUrl: productImageUrl(parsed.data.name, parsed.data.category),
+    },
   });
   if (parsed.data.stock > 0) {
     await withOrg(session.orgId, (tx) =>
