@@ -1,6 +1,5 @@
 import { requireScopedSession } from "@/lib/tenant";
 import { reservedByProduct, availableOf, stockState } from "@/lib/stock";
-import { CategoryBar } from "./category-bar";
 import { ProductCard } from "./product-card";
 
 export default async function CataloguePage({
@@ -17,8 +16,6 @@ export default async function CataloguePage({
   });
 
   const reserved = await reservedByProduct(session.orgId);
-
-  const categories = Array.from(new Set(products.map((p) => p.category))).sort();
 
   const query = (q ?? "").trim().toLowerCase();
   const filtered = products.filter((p) => {
@@ -47,23 +44,34 @@ export default async function CataloguePage({
     };
   });
 
+  const heading = query
+    ? `Results for “${q}”`
+    : cat && cat !== "All"
+    ? cat
+    : "All supplies";
+
   return (
     <div>
-      <div className="mb-5">
-        <h1 className="font-display text-3xl">Shop supplies</h1>
-        <p className="text-muted text-sm mt-1">
-          Out of stock? You can still order it — the warehouse sends it when stock arrives.
-        </p>
+      {/* Results bar */}
+      <div className="bg-surface border border-line rounded-sm px-4 py-2.5 flex items-center justify-between flex-wrap gap-2">
+        <div className="text-sm">
+          <span className="font-semibold">{heading}</span>
+          <span className="text-muted"> · {cards.length} item{cards.length === 1 ? "" : "s"}</span>
+        </div>
+        <div className="text-xs text-muted">
+          Out of stock items can still be ordered — the warehouse ships them when stock arrives.
+        </div>
       </div>
 
-      <CategoryBar categories={["All", ...categories]} active={cat ?? "All"} q={q} />
-
       {cards.length === 0 ? (
-        <p className="text-muted mt-16 text-center">
-          No products match{query ? ` “${q}”` : ""}. Try a different search or category.
-        </p>
+        <div className="bg-surface border border-line rounded-sm mt-3 p-16 text-center">
+          <p className="text-muted">No products match{query ? ` “${q}”` : ""}. Try a different search or category.</p>
+        </div>
       ) : (
-        <div className="grid gap-4 mt-6" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))" }}>
+        <div
+          className="grid gap-3 mt-3"
+          style={{ gridTemplateColumns: "repeat(auto-fill, minmax(210px, 1fr))" }}
+        >
           {cards.map((c) => (
             <ProductCard key={c.id} product={c} />
           ))}

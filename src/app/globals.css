@@ -42,6 +42,17 @@
   --color-out-soft: #f9e7e7;
   --color-copper: #a25e1e;
 
+  /* Marketplace chrome (used by the storefront theme only) */
+  --color-header: #131921;
+  --color-header-accent: #232f3e;
+  --color-on-header: #ffffff;
+  --color-cta: #ffd814;         /* Add-to-cart yellow */
+  --color-cta-dark: #f5c400;
+  --color-cta-2: #ffa41c;       /* Order/Request orange */
+  --color-cta-2-dark: #f39200;
+  --color-on-cta: #0f1111;      /* dark text on yellow/orange */
+  --color-price: #067d62;       /* deal/availability green */
+
   /* Rhythm */
   --radius-sm: 6px;
   --radius-md: 10px;
@@ -123,12 +134,43 @@
   --color-out: var(--color-out);
   --color-out-soft: var(--color-out-soft);
   --color-copper: var(--color-copper);
+  --color-header: var(--color-header);
+  --color-header-accent: var(--color-header-accent);
+  --color-on-header: var(--color-on-header);
+  --color-cta: var(--color-cta);
+  --color-cta-dark: var(--color-cta-dark);
+  --color-cta-2: var(--color-cta-2);
+  --color-cta-2-dark: var(--color-cta-2-dark);
+  --color-on-cta: var(--color-on-cta);
+  --color-price: var(--color-price);
   --font-display: var(--font-marcellus);
   --font-sans: var(--font-inter);
 }
 
-/* Legacy surface-theme hooks kept as no-ops (root/light is the default). */
+/* Storefront = online marketplace look (Amazon/Flipkart family):
+   grey page, white cards, dark header, blue links, yellow CTAs. */
 .theme-store {
+  --color-bg: #eff1f3;
+  --color-surface: #ffffff;
+  --color-surface-raised: #ffffff;
+
+  --color-ink: #0f1111;
+  --color-muted: #565959;
+  --color-faint: #8b8f92;
+
+  --color-line: #e3e6e6;
+  --color-line-soft: #eef0f0;
+
+  /* Primary = marketplace blue (links, quantity controls, secondary buttons) */
+  --color-velvet: #2874f0;
+  --color-velvet-dark: #1a5fd0;
+  --color-velvet-soft: #e8f0fe;
+  --color-on-velvet: #ffffff;
+  --color-plum: #c7511f;         /* review/price-style rust accent */
+
+  --shadow-sm: 0 1px 2px rgba(15, 17, 17, 0.06);
+  --shadow-md: 0 2px 8px rgba(15, 17, 17, 0.10);
+  --shadow-lg: 0 6px 20px rgba(15, 17, 17, 0.12);
 }
 
 /* ═══════════════════════════════════════════════════════════

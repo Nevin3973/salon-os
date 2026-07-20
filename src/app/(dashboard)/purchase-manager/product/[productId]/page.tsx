@@ -5,11 +5,10 @@ import { reservedByProduct, availableOf, stockState } from "@/lib/stock";
 import { BuyPanel } from "./buy-panel";
 import { ProductCard } from "../../catalogue/product-card";
 
-// Deterministic soft tint per category (matches the catalogue cards).
 function tint(seed: string) {
   let h = 0;
   for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) % 360;
-  return `hsl(${h} 42% 93%)`;
+  return `hsl(${h} 42% 95%)`;
 }
 
 export default async function ProductDetailPage({
@@ -31,7 +30,7 @@ export default async function ProductDetailPage({
     await db.product.findMany({
       where: { active: true, category: product.category, id: { not: product.id } },
       orderBy: { name: "asc" },
-      take: 4,
+      take: 6,
     })
   ).map((p) => {
     const avail = availableOf(p.stock, reserved.get(p.id) ?? 0);
@@ -50,86 +49,81 @@ export default async function ProductDetailPage({
 
   return (
     <div>
-      <nav className="text-sm text-faint flex items-center gap-2 flex-wrap">
-        <Link href="/purchase-manager/catalogue" className="hover:text-ink">Shop</Link>
-        <span>/</span>
+      {/* Breadcrumb */}
+      <nav className="text-xs text-muted flex items-center gap-1.5 flex-wrap mb-3">
+        <Link href="/purchase-manager/catalogue" className="hover:text-velvet hover:underline">Shop</Link>
+        <span className="text-faint">›</span>
         <Link
           href={`/purchase-manager/catalogue?cat=${encodeURIComponent(product.category)}`}
-          className="hover:text-ink"
+          className="hover:text-velvet hover:underline"
         >
           {product.category}
         </Link>
-        <span>/</span>
-        <span className="text-muted">{product.name}</span>
+        <span className="text-faint">›</span>
+        <span className="text-faint truncate">{product.name}</span>
       </nav>
 
-      <div className="grid lg:grid-cols-[1.1fr_1fr] gap-10 mt-6 items-start">
-        {/* Gallery */}
-        {product.imageUrl ? (
-          <div className="rounded-xl aspect-[4/3] overflow-hidden border border-line bg-white">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" />
-          </div>
-        ) : (
-          <div
-            className="rounded-xl aspect-[4/3] grid place-items-center border border-line"
-            style={{ background: tint(product.category) }}
-          >
-            <span className="font-display text-8xl text-velvet/25 select-none">
-              {product.brand.charAt(0)}
-            </span>
-          </div>
-        )}
-
-        {/* Details */}
-        <div>
-          <div className="text-xs tracking-[0.16em] uppercase text-plum font-semibold">
-            {product.brand}
-          </div>
-          <h1 className="font-display text-3xl lg:text-4xl font-bold mt-2 leading-tight">
-            {product.name}
-          </h1>
-          <div className="text-sm text-faint mt-2">
-            SKU {product.sku} · sold per {product.unit}
-          </div>
-
-          <BuyPanel
-            productId={product.id}
-            available={available}
-            state={state}
-          />
-
-          <div className="mt-8 border-t border-line pt-6 space-y-3 text-sm">
-            <div className="flex gap-3">
-              <Check />
-              <span className="text-muted">
-                Dispatched from your organization&rsquo;s central warehouse
-              </span>
-            </div>
-            <div className="flex gap-3">
-              <Check />
-              <span className="text-muted">
-                Every dispatch is tracked — follow delivery progress from My Orders
-              </span>
-            </div>
-            {state === "out" && (
-              <div className="flex gap-3">
-                <Check />
-                <span className="text-muted">
-                  Out of stock now — place a requirement and the warehouse supplies it when stock lands
-                </span>
+      {/* Amazon 3-column: image | details | buy box */}
+      <div className="bg-surface border border-line rounded-sm">
+        <div className="grid lg:grid-cols-[360px_1fr_300px] gap-6 p-4 lg:p-6">
+          {/* Image */}
+          <div className="bg-white border border-line rounded-sm grid place-items-center aspect-square overflow-hidden">
+            {product.imageUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={product.imageUrl} alt={product.name} className="w-full h-full object-contain p-4" />
+            ) : (
+              <div className="w-full h-full grid place-items-center" style={{ background: tint(product.category) }}>
+                <span className="text-7xl font-bold text-velvet/30">{product.brand.charAt(0)}</span>
               </div>
             )}
+          </div>
+
+          {/* Details */}
+          <div className="min-w-0">
+            <h1 className="text-xl lg:text-2xl font-semibold leading-tight">{product.name}</h1>
+            <Link
+              href={`/purchase-manager/catalogue?q=${encodeURIComponent(product.brand)}`}
+              className="text-velvet text-sm hover:underline mt-1 inline-block"
+            >
+              Brand: {product.brand}
+            </Link>
+            <div className="text-xs text-muted mt-1">SKU {product.sku} · sold per {product.unit}</div>
+
+            <div className="border-t border-line mt-4 pt-4">
+              <div className="text-[15px] font-semibold mb-1">
+                {state === "in" && <span style={{ color: "var(--color-price)" }}>In stock</span>}
+                {state === "low" && <span className="text-low">Low stock — only {available} left</span>}
+                {state === "out" && <span className="text-out">Currently out of stock</span>}
+              </div>
+              {state !== "out" && (
+                <div className="text-sm text-muted">{available} available from the central warehouse.</div>
+              )}
+            </div>
+
+            <div className="border-t border-line mt-4 pt-4">
+              <h2 className="text-sm font-semibold mb-2">About this item</h2>
+              <ul className="space-y-1.5 text-sm text-muted list-disc pl-5">
+                <li>Dispatched from your organization&rsquo;s central warehouse.</li>
+                <li>Every dispatch is tracked — follow delivery progress under Your Orders.</li>
+                <li>Sold per {product.unit}, brand {product.brand}.</li>
+                {state === "out" && (
+                  <li>Out of stock now — place a requirement and the warehouse supplies it when stock arrives.</li>
+                )}
+              </ul>
+            </div>
+          </div>
+
+          {/* Buy box */}
+          <div className="lg:sticky lg:top-4 self-start">
+            <BuyPanel productId={product.id} available={available} state={state} unit={product.unit} />
           </div>
         </div>
       </div>
 
       {related.length > 0 && (
-        <div className="mt-14">
-          <h2 className="font-display text-2xl font-bold mb-5">
-            More in {product.category}
-          </h2>
-          <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))" }}>
+        <div className="mt-4 bg-surface border border-line rounded-sm p-4">
+          <h2 className="text-lg font-semibold mb-3">More in {product.category}</h2>
+          <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))" }}>
             {related.map((p) => (
               <ProductCard key={p.id} product={p} />
             ))}
@@ -137,13 +131,5 @@ export default async function ProductDetailPage({
         </div>
       )}
     </div>
-  );
-}
-
-function Check() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="text-plum shrink-0 mt-0.5">
-      <path d="M20 6L9 17l-5-5" />
-    </svg>
   );
 }

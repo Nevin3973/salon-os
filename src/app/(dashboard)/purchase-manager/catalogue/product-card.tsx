@@ -18,17 +18,11 @@ type Product = {
   state: StockState;
 };
 
-const STATE_META: Record<StockState, { label: string; className: string }> = {
-  in: { label: "In stock", className: "text-in" },
-  low: { label: "Low stock", className: "text-low" },
-  out: { label: "Out of stock", className: "text-out" },
-};
-
 // Deterministic soft tint per category for the image placeholder.
 function tint(seed: string) {
   let h = 0;
   for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) % 360;
-  return `hsl(${h} 45% 94%)`;
+  return `hsl(${h} 45% 96%)`;
 }
 
 export function ProductCard({ product }: { product: Product }) {
@@ -37,57 +31,59 @@ export function ProductCard({ product }: { product: Product }) {
   const [pending, startTransition] = useTransition();
   const [added, setAdded] = useState(false);
 
-  const meta = STATE_META[product.state];
   const isRequirement = product.state === "out";
   const max = isRequirement ? 9999 : Math.max(1, product.available);
+  const href = `/purchase-manager/product/${product.id}`;
 
   function add() {
     startTransition(async () => {
       await addToCart({ productId: product.id, qty });
       setAdded(true);
       router.refresh();
-      setTimeout(() => setAdded(false), 1400);
+      setTimeout(() => setAdded(false), 1500);
     });
   }
 
   return (
-    <article className="bg-surface border border-line rounded-xl p-3 flex flex-col hover:shadow-[0_2px_16px_rgba(27,22,38,0.08)] hover:border-velvet/40 transition-all">
-      <Link href={`/purchase-manager/product/${product.id}`} className="block group">
-        {product.imageUrl ? (
-          <div className="h-32 rounded-lg overflow-hidden mb-3 bg-white group-hover:opacity-90 transition-opacity">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" />
-          </div>
-        ) : (
-          <div
-            className="h-32 rounded-lg grid place-items-center mb-3 group-hover:opacity-90 transition-opacity"
-            style={{ background: tint(product.category) }}
-          >
-            <span className="font-display text-3xl text-velvet/50">{product.brand.charAt(0)}</span>
-          </div>
-        )}
-
-        <div className="text-[11px] tracking-wide text-faint uppercase">{product.sku}</div>
-        <h3 className="text-sm font-medium leading-snug mt-0.5 line-clamp-2 min-h-[2.5rem] group-hover:text-velvet transition-colors">
-          {product.name}
-        </h3>
-        <div className="text-xs text-muted mt-0.5">
-          {product.brand} · per {product.unit}
+    <article className="bg-surface border border-line rounded-sm p-3 flex flex-col hover:shadow-md transition-shadow">
+      {/* Image */}
+      <Link href={href} className="block">
+        <div className="h-40 rounded-sm grid place-items-center mb-2.5 bg-white overflow-hidden">
+          {product.imageUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={product.imageUrl} alt={product.name} className="w-full h-full object-contain p-2" />
+          ) : (
+            <div className="w-full h-full grid place-items-center" style={{ background: tint(product.category) }}>
+              <span className="text-4xl font-bold text-velvet/40">{product.brand.charAt(0)}</span>
+            </div>
+          )}
         </div>
       </Link>
 
-      <div className="mt-2 flex items-center gap-1.5 text-xs">
-        <span className={`inline-block w-1.5 h-1.5 rounded-full ${
-          product.state === "in" ? "bg-in" : product.state === "low" ? "bg-low" : "bg-out"
-        }`} />
-        <span className={meta.className}>
-          {meta.label}
-          {product.state !== "out" ? ` · ${product.available}` : ""}
-        </span>
+      {/* Title + brand */}
+      <Link href={href} className="block group">
+        <h3 className="text-sm leading-snug line-clamp-2 min-h-[2.4rem] group-hover:text-velvet group-hover:underline">
+          {product.name}
+        </h3>
+      </Link>
+      <div className="text-xs text-muted mt-1">
+        <span className="font-medium text-ink">{product.brand}</span> · per {product.unit}
       </div>
 
-      <div className="mt-auto pt-3 flex items-center justify-between gap-2">
-        <div className="flex items-center border border-line rounded-full">
+      {/* Availability */}
+      <div className="mt-1.5 text-[13px] font-medium">
+        {product.state === "in" && (
+          <span style={{ color: "var(--color-price)" }}>In stock · {product.available}</span>
+        )}
+        {product.state === "low" && (
+          <span className="text-low">Only {product.available} left</span>
+        )}
+        {product.state === "out" && <span className="text-out">Out of stock</span>}
+      </div>
+
+      {/* Controls */}
+      <div className="mt-auto pt-3 flex items-center gap-2">
+        <div className="flex items-center border border-line rounded-full shrink-0">
           <button
             onClick={() => setQty((n) => Math.max(1, n - 1))}
             className="w-7 h-7 grid place-items-center text-muted hover:text-ink"
@@ -108,13 +104,14 @@ export function ProductCard({ product }: { product: Product }) {
         <button
           onClick={add}
           disabled={pending}
-          className={`flex-1 h-8 rounded-full text-xs font-semibold transition-colors disabled:opacity-60 ${
+          className="flex-1 h-9 rounded-full text-[13px] font-semibold disabled:opacity-60 transition-colors"
+          style={
             isRequirement
-              ? "border border-velvet text-velvet hover:bg-velvet-soft"
-              : "bg-velvet text-white hover:bg-velvet-dark"
-          }`}
+              ? { background: "var(--color-cta-2)", color: "var(--color-on-cta)" }
+              : { background: "var(--color-cta)", color: "var(--color-on-cta)" }
+          }
         >
-          {added ? "Added ✓" : isRequirement ? "Request" : "Add"}
+          {added ? "Added ✓" : isRequirement ? "Request" : "Add to cart"}
         </button>
       </div>
     </article>
