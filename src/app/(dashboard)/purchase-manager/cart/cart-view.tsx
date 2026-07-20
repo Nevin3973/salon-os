@@ -140,7 +140,7 @@ export function CartView({
         </div>
       </div>
 
-      <aside className="bg-surface border border-line rounded-xl p-5 lg:sticky lg:top-20">
+      <aside className="bg-surface border border-line rounded-xl p-5 lg:sticky lg:top-6">
         <h2 className="font-medium">Summary</h2>
         <div className="flex justify-between text-sm mt-3">
           <span className="text-muted">Items</span>

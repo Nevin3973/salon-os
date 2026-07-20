@@ -153,7 +153,7 @@ export function OpsShell({
       </aside>
 
       {/* Mobile top bar + drawer */}
-      <div className="lg:hidden sticky top-0 z-40 bg-surface border-b border-line flex items-center gap-3 px-4 h-14">
+      <div className="lg:hidden relative z-40 bg-surface border-b border-line flex items-center gap-3 px-4 h-14">
         <button
           onClick={() => setMobileOpen((v) => !v)}
           aria-label="Menu"
