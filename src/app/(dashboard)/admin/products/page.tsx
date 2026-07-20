@@ -12,7 +12,7 @@ export default async function AdminProductsPage() {
 
   return (
     <div>
-      <h1 className="font-display text-3xl">Products</h1>
+      <h1 className="text-2xl font-semibold">Products</h1>
       <p className="text-muted text-sm mt-1 max-w-xl">
         Hidden products disappear from the salon shop right away. Their history stays.
       </p>

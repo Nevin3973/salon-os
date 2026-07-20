@@ -1,6 +1,7 @@
 import { requireScopedSession } from "@/lib/tenant";
 import { orderCode } from "@/lib/format";
 import { OUTSTANDING_REASONS } from "@/lib/constants";
+import { PageHeader, StatGrid } from "@/components/console-ui";
 import { DispatchBoard, type QueueOrder } from "./dispatch-board";
 
 export default async function QueuePage() {
@@ -48,24 +49,27 @@ export default async function QueuePage() {
     })),
   }));
 
+  const pending = queue.filter((o) => o.status === "PENDING").length;
+  const processing = queue.filter((o) => o.status === "PROCESSING").length;
+  const unitsToSend = queue.reduce(
+    (s, o) => s + o.items.reduce((n, it) => n + (it.requestedQty - it.deliveredQty), 0),
+    0
+  );
+
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="font-display text-3xl font-bold text-ink">Order queue</h1>
-        <p className="text-muted text-sm mt-2 leading-relaxed max-w-2xl">
-          {queue.length === 0
-            ? "The queue is clear. New branch orders appear here the moment they're placed."
-            : `${queue.length} order${queue.length === 1 ? "" : "s"} to process. Dispatch what you have now and keep an order open, or close it and log what's outstanding.`}
-        </p>
-        {queue.length > 0 && (
-          <div className="mt-4">
-            <div className="glass-surface rounded-xl px-4 py-2.5 inline-flex items-center gap-2 animate-scale-in">
-              <span className="w-2 h-2 rounded-full bg-velvet animate-pulse-soft" />
-              <span className="text-xs text-velvet font-semibold">{queue.length} in queue</span>
-            </div>
-          </div>
-        )}
-      </div>
+      <PageHeader
+        title="Order queue"
+        subtitle="New orders from the branches. Dispatch what you have and keep an order open, or close it and record what's still owed."
+      />
+
+      <StatGrid
+        stats={[
+          { label: "New (pending)", value: pending, tone: pending ? "accent" : "default" },
+          { label: "In progress", value: processing },
+          { label: "Units to send", value: unitsToSend },
+        ]}
+      />
 
       <DispatchBoard orders={queue} reasons={[...OUTSTANDING_REASONS]} />
     </div>

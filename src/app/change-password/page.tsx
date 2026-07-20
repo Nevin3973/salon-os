@@ -11,7 +11,7 @@ export default async function ChangePasswordPage() {
       <div className="flex-1 flex items-center justify-center px-6">
         <div className="w-full max-w-sm">
           <div className="font-display text-3xl select-none">
-            Salon<span className="text-velvet"> OS</span>
+            Beyond<span className="text-velvet"> Demands</span>
           </div>
           <h1 className="text-lg font-semibold mt-8">Set your own password</h1>
           <p className="text-muted text-sm mt-1.5">
@@ -21,7 +21,7 @@ export default async function ChangePasswordPage() {
           <ForcedPasswordForm />
         </div>
       </div>
-      <p className="text-center text-faint text-xs pb-6">Salon OS · by Infynix Growth Solutions</p>
+      <p className="text-center text-faint text-xs pb-6">Beyond Demands · by Infynix Growth Solutions</p>
     </div>
   );
 }
