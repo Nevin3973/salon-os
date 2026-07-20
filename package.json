@@ -6,8 +6,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint",
-    "test": "vitest run"
+    "lint": "eslint src --ext .js,.ts,.tsx",
+    "test": "vitest run",
+    "docker:build": "docker build -t salon-os .",
+    "docker:run": "docker run -p 3000:3000 salon-os"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",

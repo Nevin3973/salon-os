@@ -17,6 +17,8 @@ type AppClaims = {
  * for use in Server Actions / Route Handlers (Node runtime).
  */
 export const authConfig: NextAuthConfig = {
+  // Required on Vercel/behind proxies: trust the platform-provided host header.
+  trustHost: true,
   pages: {
     signIn: "/login",
   },

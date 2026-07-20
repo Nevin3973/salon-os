@@ -231,11 +231,13 @@ async function reset() {
 }
 
 async function main() {
-  // This seed wipes data and creates weak demo accounts — dev machines only.
-  const dbUrl = process.env.DATABASE_URL ?? "";
-  if (process.env.NODE_ENV === "production" || !/localhost|127\.0\.0\.1/.test(dbUrl)) {
+  // This seed wipes data and creates weak demo accounts — dev machines only,
+  // unless deliberately overridden (e.g. seeding a hosted DEMO environment).
+  const dbUrl = process.env.DIRECT_URL ?? process.env.DATABASE_URL ?? "";
+  const isLocal = /localhost|127\.0\.0\.1/.test(dbUrl);
+  if (!isLocal && process.env.SEED_ALLOW_REMOTE !== "yes") {
     throw new Error(
-      "Refusing to seed: this looks like a non-local database. The demo seed is for development only."
+      "Refusing to seed: this looks like a non-local database. Set SEED_ALLOW_REMOTE=yes only for a demo environment — this wipes all data."
     );
   }
 

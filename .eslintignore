@@ -1,0 +1,7 @@
+.agents/**
+.github/**
+node_modules/**
+.next/**
+out/**
+build/**
+.git/**
