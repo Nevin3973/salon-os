@@ -1,0 +1,45 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-test-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install dependencies
+        run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Type check
+        run: npx tsc --noEmit
+      - name: Unit tests
+        run: npm test -- --run
+      - name: Build Next.js
+        run: npm run build
+      - name: Build Docker image
+        run: docker build -t ${{ secrets.DOCKER_USERNAME }}/salon-os:${{ github.sha }} .
+      - name: Push Docker image to Docker Hub
+        env:
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+        run: |
+          echo $DOCKER_PASSWORD | docker login -u $DOCKER_USERNAME --password-stdin
+          docker push $DOCKER_USERNAME/salon-os:${{ github.sha }}
+      - name: Deploy to Azure Container Apps
+        uses: azure/azure-cli@v2
+        with:
+          inlineScript: |
+            az login --service-principal -u ${{ secrets.AZURE_CLIENT_ID }} -p ${{ secrets.AZURE_CLIENT_SECRET }} --tenant ${{ secrets.AZURE_TENANT_ID }}
+            az account set -s ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+            az containerapp update \
+              --name salon-os \
+              --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
+              --image ${{ secrets.DOCKER_USERNAME }}/salon-os:${{ github.sha }}
