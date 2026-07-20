@@ -34,7 +34,7 @@ export function StorefrontHeader({
     }`;
 
   return (
-    <header className="bg-surface border-b border-line sticky top-0 z-30">
+    <header className="bg-surface border-b border-line relative z-30">
       <div className="max-w-6xl mx-auto px-6 h-16 flex items-center gap-4">
         <Link href="/purchase-manager/catalogue" className="shrink-0">
           <VelvetLogo />

@@ -13,7 +13,7 @@ const ITEMS = [
 export function AccountNav() {
   const pathname = usePathname();
   return (
-    <nav className="bg-surface border border-line rounded-xl p-2 md:sticky md:top-20">
+    <nav className="bg-surface border border-line rounded-xl p-2 md:sticky md:top-6">
       {ITEMS.map((item) => {
         const active = item.exact ? pathname === item.href : pathname.startsWith(item.href);
         return (
