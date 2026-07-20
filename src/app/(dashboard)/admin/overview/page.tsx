@@ -1,6 +1,7 @@
 import { requireScopedSession } from "@/lib/tenant";
 import { reservedByProduct, availableOf, stockState } from "@/lib/stock";
 import { fmtDate, orderCode } from "@/lib/format";
+import { formatMoney } from "@/lib/money";
 import { StatusChip } from "@/components/status-chip";
 import Link from "next/link";
 
@@ -65,8 +66,13 @@ export default async function OverviewPage() {
   const catCounts = new Map<string, number>();
   for (const p of activeProducts) catCounts.set(p.category, (catCounts.get(p.category) ?? 0) + 1);
 
-  const kpis: [string, number][] = [
+  const totalValueCents = orders
+    .filter((o) => o.status !== "CANCELLED")
+    .reduce((s, o) => s + o.totalCents, 0);
+
+  const kpis: [string, number | string][] = [
     ["Total orders", orders.filter((o) => o.status !== "CANCELLED").length],
+    ["Order value", formatMoney(totalValueCents)],
     ["Lines waiting on stock", outstandingLines],
     ["Low or out of stock", lowOrOut],
     ["Team members", memberships],
@@ -168,7 +174,8 @@ export default async function OverviewPage() {
               <div key={o.id} className="flex items-center gap-3 text-sm">
                 <span className="font-medium tabular-nums">{orderCode(o.orderNo)}</span>
                 <span className="text-faint text-xs truncate">{o.branch.name}</span>
-                <span className="ml-auto"><StatusChip status={o.status} /></span>
+                <span className="text-xs font-semibold ml-auto">{formatMoney(o.totalCents)}</span>
+                <StatusChip status={o.status} />
               </div>
             ))}
             {orders.length === 0 && <p className="text-faint text-xs">No orders yet.</p>}

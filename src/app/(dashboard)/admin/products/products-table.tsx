@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toggleProductActive, createProduct } from "@/lib/actions/admin";
+import { formatMoney, parseMoneyToMinor } from "@/lib/money";
 
 type Row = {
   id: string;
@@ -12,6 +13,7 @@ type Row = {
   category: string;
   unit: string;
   stock: number;
+  priceCents: number;
   active: boolean;
 };
 
@@ -60,6 +62,7 @@ export function ProductsTable({ products, categories }: { products: Row[]; categ
               <th className="font-medium px-4 py-3">SKU</th>
               <th className="font-medium px-4 py-3">Product</th>
               <th className="font-medium px-4 py-3">Category</th>
+              <th className="font-medium px-4 py-3 text-right">Price</th>
               <th className="font-medium px-4 py-3 text-right">Stock</th>
               <th className="font-medium px-4 py-3">Status</th>
               <th className="px-4 py-3" />
@@ -74,6 +77,7 @@ export function ProductsTable({ products, categories }: { products: Row[]; categ
                   <div className="text-xs text-faint">{p.brand} · per {p.unit}</div>
                 </td>
                 <td className="px-4 py-3 text-muted">{p.category}</td>
+                <td className="px-4 py-3 text-right tabular-nums">{formatMoney(p.priceCents)}</td>
                 <td className="px-4 py-3 text-right tabular-nums">{p.stock}</td>
                 <td className="px-4 py-3">
                   <span className={p.active ? "text-in" : "text-faint"}>
@@ -133,6 +137,7 @@ function AddProductForm({
     brand: "",
     category: categories[0] ?? "",
     unit: "piece",
+    price: "",
     stock: "0",
     minStock: "0",
   });
@@ -149,6 +154,7 @@ function AddProductForm({
         brand: form.brand,
         category: form.category,
         unit: form.unit,
+        priceCents: parseMoneyToMinor(form.price) ?? 0,
         stock: Number(form.stock) || 0,
         minStock: Number(form.minStock) || 0,
       });
@@ -172,6 +178,7 @@ function AddProductForm({
           <datalist id="cats">{categories.map((c) => <option key={c} value={c} />)}</datalist>
         </L>
         <L label="Unit"><input value={form.unit} onChange={set("unit")} required className={inputCls} /></L>
+        <L label="Price (INR)"><input value={form.price} onChange={set("price")} placeholder="e.g. 1299" required className={inputCls} /></L>
         <L label="Stock"><input type="number" min={0} value={form.stock} onChange={set("stock")} className={inputCls} /></L>
         <L label="Low-stock alert at"><input type="number" min={0} value={form.minStock} onChange={set("minStock")} className={inputCls} /></L>
       </div>

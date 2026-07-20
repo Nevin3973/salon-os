@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireScopedSession } from "@/lib/tenant";
 import { reservedByProduct, availableOf, stockState } from "@/lib/stock";
+import { formatMoney } from "@/lib/money";
 import { BuyPanel } from "./buy-panel";
 import { ProductCard } from "../../catalogue/product-card";
 
@@ -42,6 +43,7 @@ export default async function ProductDetailPage({
       category: p.category,
       unit: p.unit,
       imageUrl: p.imageUrl,
+      priceCents: p.priceCents,
       available: avail,
       state: stockState(avail, p.minStock),
     };
@@ -90,6 +92,13 @@ export default async function ProductDetailPage({
             <div className="text-xs text-muted mt-1">SKU {product.sku} · sold per {product.unit}</div>
 
             <div className="border-t border-line mt-4 pt-4">
+              <div className="flex items-baseline gap-2">
+                <span className="text-3xl font-semibold">{formatMoney(product.priceCents)}</span>
+                <span className="text-sm text-muted">per {product.unit}</span>
+              </div>
+            </div>
+
+            <div className="border-t border-line mt-4 pt-4">
               <div className="text-[15px] font-semibold mb-1">
                 {state === "in" && <span style={{ color: "var(--color-price)" }}>In stock</span>}
                 {state === "low" && <span className="text-low">Low stock — only {available} left</span>}
@@ -115,7 +124,7 @@ export default async function ProductDetailPage({
 
           {/* Buy box */}
           <div className="lg:sticky lg:top-4 self-start">
-            <BuyPanel productId={product.id} available={available} state={state} unit={product.unit} />
+            <BuyPanel productId={product.id} available={available} state={state} unit={product.unit} priceCents={product.priceCents} />
           </div>
         </div>
       </div>

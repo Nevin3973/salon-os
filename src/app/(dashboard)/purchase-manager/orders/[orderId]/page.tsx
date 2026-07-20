@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireScopedSession } from "@/lib/tenant";
 import { orderCode, fmtDate, fmtDateTime } from "@/lib/format";
+import { formatMoney } from "@/lib/money";
 import { StatusChip } from "@/components/status-chip";
 import { OrderActions } from "./order-actions";
 
@@ -95,6 +96,10 @@ export default async function OrderDetailPage({
 
       {/* Progress bar */}
       <div className="bg-surface border border-line rounded-xl p-4 mt-4">
+        <div className="flex justify-between items-baseline mb-3 pb-3 border-b border-line">
+          <span className="text-sm font-semibold">Order total</span>
+          <span className="text-lg font-semibold">{formatMoney(order.totalCents)}</span>
+        </div>
         <div className="flex justify-between text-xs text-muted mb-1.5">
           <span>Delivery progress</span>
           <span className="tabular-nums">{totalDel} / {totalReq} units</span>
@@ -119,6 +124,10 @@ export default async function OrderDetailPage({
                   <div className="font-medium text-sm">{it.product.name}</div>
                   <div className="text-xs text-muted">{it.product.brand} · per {it.product.unit}</div>
                   {it.note && <div className="text-xs text-faint italic mt-1">“{it.note}”</div>}
+                  <div className="text-sm mt-1">
+                    <span className="font-semibold">{formatMoney(it.unitPriceCents * it.requestedQty)}</span>
+                    <span className="text-xs text-muted"> ({formatMoney(it.unitPriceCents)} × {it.requestedQty})</span>
+                  </div>
                 </div>
                 <div className="text-right text-sm shrink-0">
                   <span className={done ? "text-in font-medium" : ""}>

@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { setCartQty, setCartNote, removeFromCart } from "@/lib/actions/cart";
 import { placeOrder } from "@/lib/actions/orders";
+import { formatMoney } from "@/lib/money";
 
 type Line = {
   productId: string;
@@ -12,6 +13,7 @@ type Line = {
   unit: string;
   qty: number;
   note: string;
+  priceCents: number;
   available: number;
   isRequirement: boolean;
 };
@@ -44,6 +46,7 @@ export function CartView({
 
   const totalUnits = lines.reduce((s, l) => s + l.qty, 0);
   const requirementCount = lines.filter((l) => l.isRequirement).length;
+  const subtotalCents = lines.reduce((s, l) => s + l.priceCents * l.qty, 0);
 
   function update(productId: string, qty: number) {
     startTransition(async () => {
@@ -93,6 +96,12 @@ export function CartView({
                 <div className="flex-1 min-w-0">
                   <div className="font-medium text-sm">{l.name}</div>
                   <div className="text-xs text-muted">{l.brand} · per {l.unit}</div>
+                  <div className="text-sm mt-1">
+                    <span className="font-semibold">{formatMoney(l.priceCents * l.qty)}</span>
+                    {l.qty > 1 && (
+                      <span className="text-xs text-muted"> ({formatMoney(l.priceCents)} each)</span>
+                    )}
+                  </div>
                   {l.isRequirement && (
                     <div className="text-xs text-low mt-1">
                       Requirement — {l.available > 0 ? `${l.available} in stock now, ` : ""}
@@ -156,6 +165,10 @@ export function CartView({
             <span className="text-low">{requirementCount}</span>
           </div>
         )}
+        <div className="flex justify-between items-baseline mt-3 pt-3 border-t border-line">
+          <span className="font-semibold">Order total</span>
+          <span className="text-xl font-semibold">{formatMoney(subtotalCents)}</span>
+        </div>
         {branchName && <div className="text-xs text-faint mt-3">Ordering for {branchName}</div>}
 
         {step === "cart" && (

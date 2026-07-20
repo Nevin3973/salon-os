@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { addToCart } from "@/lib/actions/cart";
+import { formatMoney } from "@/lib/money";
 import type { StockState } from "@/lib/stock";
 
 type Product = {
@@ -14,6 +15,7 @@ type Product = {
   category: string;
   unit: string;
   imageUrl?: string | null;
+  priceCents: number;
   available: number;
   state: StockState;
 };
@@ -68,6 +70,12 @@ export function ProductCard({ product }: { product: Product }) {
       </Link>
       <div className="text-xs text-muted mt-1">
         <span className="font-medium text-ink">{product.brand}</span> · per {product.unit}
+      </div>
+
+      {/* Price */}
+      <div className="mt-1.5">
+        <span className="text-lg font-semibold text-ink">{formatMoney(product.priceCents)}</span>
+        <span className="text-xs text-muted"> / {product.unit}</span>
       </div>
 
       {/* Availability */}

@@ -23,6 +23,7 @@ model Org {
   name      String
   slug      String   @unique
   orderSeq  Int      @default(0) // per-org order number counter, bumped atomically in placeOrder
+  currency  String   @default("INR") // ISO code used for all money display in this org
   createdAt DateTime @default(now())
 
   locations   Location[]
@@ -137,6 +138,8 @@ model Product {
   minStock Int     @default(0)
   active   Boolean @default(true)
   imageUrl String?
+  /// Unit price in the org's currency, stored in minor units (paise) to avoid float drift.
+  priceCents Int   @default(0)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -194,6 +197,8 @@ model Order {
   shipToAddressId String?
   shipToAddress   Address? @relation(fields: [shipToAddressId], references: [id])
   deliveryNote    String?
+  /// Order value at the time it was placed (sum of item qty × unit price), in minor units.
+  totalCents      Int      @default(0)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -214,6 +219,8 @@ model OrderItem {
   requestedQty Int
   deliveredQty Int     @default(0)
   note         String?
+  /// Price snapshot at order time — catalogue prices may change later.
+  unitPriceCents Int   @default(0)
 
   outstandingReason String?
   outstandingEta     DateTime?

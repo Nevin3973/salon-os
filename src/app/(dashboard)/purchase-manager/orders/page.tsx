@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requireScopedSession } from "@/lib/tenant";
 import { orderCode, fmtDate } from "@/lib/format";
+import { formatMoney } from "@/lib/money";
 import { StatusChip } from "@/components/status-chip";
 import { OrderSearch } from "./order-search";
 
@@ -52,6 +53,7 @@ export default async function OrdersPage({
               >
                 <div className="flex items-center gap-3 flex-wrap">
                   <span className="font-medium">{orderCode(o.orderNo)}</span>
+                  <span className="font-semibold">{formatMoney(o.totalCents)}</span>
                   <span className="text-xs text-faint">{fmtDate(o.createdAt)}</span>
                   <span className="ml-auto"><StatusChip status={o.status} /></span>
                 </div>

@@ -120,6 +120,9 @@ export async function placeOrder(input: {
       });
       const orderNo = org.orderSeq;
 
+      // Snapshot prices at order time — catalogue prices may change later.
+      const totalCents = cart.reduce((sum, line) => sum + line.product.priceCents * line.qty, 0);
+
       const order = await tx.order.create({
         data: {
           orgId: session.orgId,
@@ -130,10 +133,12 @@ export async function placeOrder(input: {
           authCodeId: matchedCodeId,
           shipToAddressId: address.id,
           deliveryNote: parsed.data.deliveryNote || null,
+          totalCents,
           items: {
             create: cart.map((line) => ({
               productId: line.productId,
               requestedQty: line.qty,
+              unitPriceCents: line.product.priceCents,
               note: line.note,
             })),
           },

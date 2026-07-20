@@ -30,6 +30,7 @@ export default async function CartPage() {
       unit: it.product.unit,
       qty: it.qty,
       note: it.note ?? "",
+      priceCents: it.product.priceCents,
       available,
       isRequirement: it.qty > available,
     };
