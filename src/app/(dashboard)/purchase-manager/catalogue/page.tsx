@@ -39,6 +39,7 @@ export default async function CataloguePage({
       category: p.category,
       unit: p.unit,
       imageUrl: p.imageUrl,
+      priceCents: p.priceCents,
       available,
       state: stockState(available, p.minStock),
     };

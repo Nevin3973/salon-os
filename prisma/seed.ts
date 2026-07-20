@@ -1,6 +1,7 @@
 import { PrismaClient, LocationType, Role } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { productImageUrl } from "../src/lib/product-image";
+import { seedPriceMinor } from "../src/lib/seed-pricing";
 
 // The seed writes without an org context, so it must use the owner
 // connection (DIRECT_URL) — the app role would be blocked by RLS.
@@ -140,7 +141,12 @@ async function seedOrg(opts: {
   const products = await Promise.all(
     opts.products.map((p) =>
       prisma.product.create({
-        data: { ...p, orgId: org.id, imageUrl: productImageUrl(p.name, p.category) },
+        data: {
+          ...p,
+          orgId: org.id,
+          imageUrl: productImageUrl(p.name, p.category),
+          priceCents: seedPriceMinor(p.name, p.category),
+        },
       })
     )
   );
@@ -287,6 +293,11 @@ async function seedSampleOrders(ctx: SeededOrg) {
     const address = ctx.addresses[spec.branch];
     const placedAt = daysAgoDate(spec.daysAgo, 9 + spec.branch, 15);
 
+    const totalCents = spec.lines.reduce(
+      (sum, l) => sum + byName.get(l.product)!.priceCents * l.req,
+      0
+    );
+
     const order = await prisma.order.create({
       data: {
         orgId: ctx.org.id,
@@ -295,6 +306,7 @@ async function seedSampleOrders(ctx: SeededOrg) {
         placedByUserId: pm.id,
         status: spec.status,
         shipToAddressId: address.id,
+        totalCents,
         createdAt: placedAt,
         items: {
           create: spec.lines.map((l) => {
@@ -304,6 +316,7 @@ async function seedSampleOrders(ctx: SeededOrg) {
               productId: p.id,
               requestedQty: l.req,
               deliveredQty: l.del,
+              unitPriceCents: p.priceCents,
               note: l.note ?? null,
               outstandingReason: spec.status === "PARTIALLY_FULFILLED" && short > 0 ? l.reason ?? "Awaiting supplier" : null,
               outstandingEta:

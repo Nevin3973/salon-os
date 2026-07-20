@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { addToCart } from "@/lib/actions/cart";
+import { formatMoney } from "@/lib/money";
 import type { StockState } from "@/lib/stock";
 
 export function BuyPanel({
@@ -11,11 +12,13 @@ export function BuyPanel({
   available,
   state,
   unit,
+  priceCents,
 }: {
   productId: string;
   available: number;
   state: StockState;
   unit: string;
+  priceCents: number;
 }) {
   const router = useRouter();
   const [qty, setQty] = useState(1);
@@ -36,6 +39,10 @@ export function BuyPanel({
 
   return (
     <div className="border border-line rounded-md p-4 bg-surface">
+      {/* Price */}
+      <div className="text-2xl font-semibold">{formatMoney(priceCents)}</div>
+      <div className="text-xs text-muted mb-3">per {unit}</div>
+
       {/* Availability */}
       <div className="text-lg font-semibold mb-1">
         {state === "in" && <span style={{ color: "var(--color-price)" }}>In stock</span>}
@@ -61,6 +68,13 @@ export function BuyPanel({
           ))}
         </select>
       </label>
+
+      {qty > 1 && (
+        <div className="text-sm mb-3 flex justify-between">
+          <span className="text-muted">Line total</span>
+          <span className="font-semibold">{formatMoney(priceCents * qty)}</span>
+        </div>
+      )}
 
       {/* CTA */}
       {added ? (
