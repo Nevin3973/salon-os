@@ -11,6 +11,15 @@ const prisma = new PrismaClient({
 
 const DEMO_PASSWORD = "password123";
 
+/** "Leila M." -> "leila.m" — collapses separators and never leaves a leading or
+ *  trailing dot, which would make the address invalid per RFC 5322. */
+function emailSlug(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ".")
+    .replace(/^\.+|\.+$/g, "");
+}
+
 type ProductSeed = {
   sku: string;
   name: string;
@@ -155,7 +164,7 @@ async function seedOrg(opts: {
 
   const pmUsers = [];
   for (let i = 0; i < branches.length; i++) {
-    const email = `${opts.pmNames[i].toLowerCase().replace(/[^a-z]/g, ".")}@${opts.slug}.demo`;
+    const email = `${emailSlug(opts.pmNames[i])}@${opts.slug}.demo`;
     const user = await prisma.user.upsert({
       where: { email },
       update: {},
@@ -168,7 +177,7 @@ async function seedOrg(opts: {
     console.log(`  PM   ${opts.pmNames[i]} <${email}> — ${branches[i].name}`);
   }
 
-  const wmEmail = `${opts.wmName.toLowerCase().replace(/[^a-z]/g, ".")}@${opts.slug}.demo`;
+  const wmEmail = `${emailSlug(opts.wmName)}@${opts.slug}.demo`;
   const wmUser = await prisma.user.upsert({
     where: { email: wmEmail },
     update: {},
@@ -179,7 +188,7 @@ async function seedOrg(opts: {
   });
   console.log(`  WM   ${opts.wmName} <${wmEmail}> — ${warehouse.name}`);
 
-  const adminEmail = `${opts.adminName.toLowerCase().replace(/[^a-z]/g, ".")}@${opts.slug}.demo`;
+  const adminEmail = `${emailSlug(opts.adminName)}@${opts.slug}.demo`;
   const adminUser = await prisma.user.upsert({
     where: { email: adminEmail },
     update: {},
