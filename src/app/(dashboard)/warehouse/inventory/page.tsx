@@ -1,5 +1,6 @@
 import { requireScopedSession } from "@/lib/tenant";
 import { reservedByProduct, availableOf, stockState } from "@/lib/stock";
+import { ExportButton } from "@/components/console-ui";
 import { InventoryTable, type InventoryRow } from "./inventory-table";
 
 export default async function InventoryPage({
@@ -39,11 +40,16 @@ export default async function InventoryPage({
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold text-ink">Inventory</h1>
-        <p className="text-muted text-sm mt-2 leading-relaxed max-w-2xl">
-          Reserved = committed to open orders. Available = stock − reserved, which is what branches
-          see. Minimum stock is editable inline.
-        </p>
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <h1 className="text-2xl font-semibold text-ink">Inventory</h1>
+            <p className="text-muted text-sm mt-2 leading-relaxed max-w-2xl">
+              Reserved = committed to open orders. Available = stock − reserved, which is what
+              branches see. Minimum stock is editable inline.
+            </p>
+          </div>
+          <ExportButton href="/api/exports/inventory" label="Stock take CSV" />
+        </div>
         {/* Summary stat chips */}
         <div className="flex gap-3 mt-4 flex-wrap">
           <div className="glass-surface rounded-xl px-4 py-2.5 flex items-center gap-2">

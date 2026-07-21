@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { requireScopedSession } from "@/lib/tenant";
-import { orderCode, fmtDate } from "@/lib/format";
+import { orderCode, fmtDate, isVoided } from "@/lib/format";
 import { formatMoney } from "@/lib/money";
 import { StatusChip } from "@/components/status-chip";
+import { ExportButton } from "@/components/console-ui";
 import { OrderSearch } from "./order-search";
 
 export default async function OrdersPage({
@@ -30,8 +31,15 @@ export default async function OrdersPage({
 
   return (
     <div className="max-w-3xl">
-      <h1 className="font-display text-2xl font-semibold mb-1">My orders</h1>
-      <p className="text-muted text-sm mb-5">Track dispatch and delivery for every order your branch has placed.</p>
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="font-display text-2xl font-semibold mb-1">My orders</h1>
+          <p className="text-muted text-sm mb-5">
+            Track dispatch and delivery for every order your branch has placed.
+          </p>
+        </div>
+        <ExportButton href="/api/exports/orders" label="Download CSV" />
+      </div>
 
       <OrderSearch initial={q ?? ""} />
 
@@ -59,7 +67,7 @@ export default async function OrdersPage({
                 </div>
                 <div className="text-sm text-muted mt-2">
                   {o.items.length} item{o.items.length === 1 ? "" : "s"} · {totalDel}/{totalReq} units delivered
-                  {outstanding > 0 && o.status !== "CANCELLED" ? (
+                  {outstanding > 0 && !isVoided(o.status) ? (
                     <span className="text-low"> · {outstanding} line{outstanding === 1 ? "" : "s"} pending</span>
                   ) : null}
                 </div>

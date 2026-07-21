@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { requireScopedSession } from "@/lib/tenant";
 import { reservedByProduct, availableOf, stockState } from "@/lib/stock";
-import { orderCode, fmtDate } from "@/lib/format";
+import { orderCode, fmtDate, isVoided } from "@/lib/format";
 import { StatusChip } from "@/components/status-chip";
 
 export default async function PmDashboardPage() {
@@ -22,7 +22,7 @@ export default async function PmDashboardPage() {
   const outstandingLines = orders
     .filter((o) => o.status === "PARTIALLY_FULFILLED")
     .reduce((s, o) => s + o.items.filter((it) => it.deliveredQty < it.requestedQty).length, 0);
-  const thisMonth = orders.filter((o) => o.status !== "CANCELLED").length;
+  const thisMonth = orders.filter((o) => !isVoided(o.status)).length;
   const lowStock = products.filter((p) => {
     const st = stockState(availableOf(p.stock, reserved.get(p.id) ?? 0), p.minStock);
     return st !== "in";

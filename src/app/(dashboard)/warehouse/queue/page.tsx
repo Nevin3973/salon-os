@@ -1,6 +1,6 @@
 import { requireScopedSession } from "@/lib/tenant";
 import { orderCode } from "@/lib/format";
-import { OUTSTANDING_REASONS } from "@/lib/constants";
+import { OUTSTANDING_REASONS, REJECTION_REASONS } from "@/lib/constants";
 import { PageHeader, StatGrid } from "@/components/console-ui";
 import { DispatchBoard, type QueueOrder } from "./dispatch-board";
 
@@ -71,7 +71,11 @@ export default async function QueuePage() {
         ]}
       />
 
-      <DispatchBoard orders={queue} reasons={[...OUTSTANDING_REASONS]} />
+      <DispatchBoard
+        orders={queue}
+        reasons={[...OUTSTANDING_REASONS]}
+        rejectionReasons={[...REJECTION_REASONS]}
+      />
     </div>
   );
 }

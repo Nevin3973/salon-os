@@ -6,6 +6,8 @@ const STYLES: Record<string, string> = {
   PARTIALLY_FULFILLED: "bg-low-soft text-low border-low/25",
   COMPLETED: "bg-in-soft text-in border-in/25",
   CANCELLED: "bg-out-soft text-out border-out/25",
+  REJECTED: "bg-out-soft text-out border-out/25",
+  RETURNED: "bg-low-soft text-low border-low/25",
 };
 
 const PULSE_STATUSES = new Set(["PENDING", "PROCESSING"]);

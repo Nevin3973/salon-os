@@ -1,5 +1,6 @@
 import { requireScopedSession } from "@/lib/tenant";
 import { fmtDateTime } from "@/lib/format";
+import { ExportButton } from "@/components/console-ui";
 
 export default async function LogPage() {
   const { db } = await requireScopedSession("WAREHOUSE_MANAGER");
@@ -20,12 +21,16 @@ export default async function LogPage() {
 
   return (
     <div>
-      <div className="mb-4">
-        <h1 className="text-2xl font-semibold">Inventory log</h1>
-        <p className="text-muted text-sm mt-1">
-          Every stock movement — dispatches, adjustments, imports and outstanding fulfilments — with
-          previous and new levels.
-        </p>
+      <div className="mb-4 flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-semibold">Inventory log</h1>
+          <p className="text-muted text-sm mt-1">
+            Every stock movement — dispatches, returns, adjustments, imports and outstanding
+            fulfilments — with previous and new levels. The table shows the latest 200; the export
+            contains every one.
+          </p>
+        </div>
+        <ExportButton href="/api/exports/movements" />
       </div>
 
       <div className="bg-surface border border-line rounded-xl overflow-hidden">

@@ -3,13 +3,51 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
-import { prisma } from "@/lib/db";
 import { requireSession, withOrg } from "@/lib/tenant";
 import { logAudit } from "@/lib/audit";
 import { orderCode } from "@/lib/format";
 import { reservedByProduct, availableOf } from "@/lib/stock";
 import { takeToken, resetTokens } from "@/lib/rate-limit";
-import { notifyNewOrder } from "@/lib/notify";
+import { notifyNewOrder, notifyOrderEdited } from "@/lib/notify";
+
+/**
+ * Verifies a branch/org authorization code — the transaction-approval gate.
+ * Used both when an order is placed and when a still-pending order is edited,
+ * so an amended order carries the same approval as a new one.
+ *
+ * Returns the matched code's id, or an error message to show the user.
+ * Rate-limited per user (10 tries / 10 min) so codes can't be brute-forced.
+ */
+async function verifyAuthCode(
+  session: { userId: string; orgId: string },
+  branchId: string,
+  rawCode: string
+): Promise<{ ok: true; codeId: string } | { ok: false; error: string }> {
+  const limiter = takeToken(`authcode:${session.userId}`, { limit: 10, windowMs: 10 * 60 * 1000 });
+  if (!limiter.ok) {
+    return {
+      ok: false,
+      error: `Too many tries. Wait about ${Math.max(1, Math.ceil(limiter.retryAfterSec / 60))} minute(s) and try again.`,
+    };
+  }
+
+  const codes = await withOrg(session.orgId, (tx) =>
+    tx.authorizationCode.findMany({
+      where: {
+        orgId: session.orgId,
+        isActive: true,
+        OR: [{ locationId: null }, { locationId: branchId }],
+      },
+    })
+  );
+  for (const c of codes) {
+    if (await bcrypt.compare(rawCode.trim(), c.codeHash)) {
+      resetTokens(`authcode:${session.userId}`);
+      return { ok: true, codeId: c.id };
+    }
+  }
+  return { ok: false, error: "That authorization code is not valid." };
+}
 
 export type PlaceOrderResult =
   | { ok: true; orderId: string; orderNo: number; code: string }
@@ -69,35 +107,9 @@ export async function placeOrder(input: {
   );
   if (!address) return { ok: false, error: "Choose a valid delivery address." };
 
-  // 10 code attempts per 10 minutes per user, then wait it out.
-  const limiter = takeToken(`authcode:${session.userId}`, { limit: 10, windowMs: 10 * 60 * 1000 });
-  if (!limiter.ok) {
-    return {
-      ok: false,
-      error: `Too many tries. Wait about ${Math.max(1, Math.ceil(limiter.retryAfterSec / 60))} minute(s) and try again.`,
-    };
-  }
-
-  // Verify the authorization code against active codes scoped to this org,
-  // that are either org-wide (locationId null) or match this branch.
-  const codes = await withOrg(session.orgId, (tx) =>
-    tx.authorizationCode.findMany({
-      where: {
-        orgId: session.orgId,
-        isActive: true,
-        OR: [{ locationId: null }, { locationId: branchId }],
-      },
-    })
-  );
-  let matchedCodeId: string | null = null;
-  for (const c of codes) {
-    if (await bcrypt.compare(parsed.data.authCode.trim(), c.codeHash)) {
-      matchedCodeId = c.id;
-      break;
-    }
-  }
-  if (!matchedCodeId) return { ok: false, error: "That authorization code is not valid." };
-  resetTokens(`authcode:${session.userId}`);
+  const verified = await verifyAuthCode(session, branchId, parsed.data.authCode);
+  if (!verified.ok) return { ok: false, error: verified.error };
+  const matchedCodeId = verified.codeId;
 
   try {
     const result = await withOrg(session.orgId, async (tx) => {
@@ -173,6 +185,185 @@ export async function placeOrder(input: {
     if (msg.startsWith("INACTIVE:")) return { ok: false, error: `${msg.slice(9)} is no longer available.` };
     return { ok: false, error: "Could not place the order. Please try again." };
   }
+}
+
+// ————————————————————————————————————————————————————————
+// Editing a pending order
+// ————————————————————————————————————————————————————————
+
+const updateSchema = z.object({
+  orderId: z.string().min(1),
+  authCode: z.string().min(1).max(64),
+  lines: z
+    .array(
+      z.object({
+        orderItemId: z.string().min(1),
+        qty: z.number().int().min(0).max(100_000),
+      })
+    )
+    .max(200),
+  /** Fold whatever is in the user's cart into this order as extra lines. */
+  mergeCart: z.boolean().optional(),
+  shipToAddressId: z.string().min(1).optional(),
+  deliveryNote: z.string().max(500).optional(),
+});
+
+export type UpdateOrderResult = { ok: true } | { ok: false; error: string };
+
+/**
+ * Amends an order the warehouse has not started on yet.
+ *
+ * Only PENDING orders of the caller's own branch can be edited, and the edit
+ * goes through the same authorization-code gate as placing an order — an
+ * amended order carries the same approval as a new one.
+ *
+ * Quantities may go up or down, a line can be dropped (qty 0), and the cart
+ * can be folded in to add products. Prices already snapshotted on existing
+ * lines are kept — the branch is not re-priced for editing — while lines
+ * added from the cart snapshot today's catalogue price. Emptying the order
+ * entirely is rejected: that is a cancellation, which has its own action and
+ * its own audit trail.
+ */
+export async function updateOrder(input: {
+  orderId: string;
+  authCode: string;
+  lines: { orderItemId: string; qty: number }[];
+  mergeCart?: boolean;
+  shipToAddressId?: string;
+  deliveryNote?: string;
+}): Promise<UpdateOrderResult> {
+  const parsed = updateSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Check the quantities and try again." };
+  const { orderId, lines, mergeCart, shipToAddressId, deliveryNote } = parsed.data;
+
+  const session = await requireSession("PURCHASE_MANAGER");
+  if (!session.locationId) return { ok: false, error: "Your account is not assigned to a branch." };
+  const branchId = session.locationId;
+
+  const verified = await verifyAuthCode(session, branchId, parsed.data.authCode);
+  if (!verified.ok) return { ok: false, error: verified.error };
+
+  const qtyById = new Map(lines.map((l) => [l.orderItemId, l.qty]));
+
+  try {
+    await withOrg(session.orgId, async (tx) => {
+      const order = await tx.order.findFirst({
+        where: { id: orderId, orgId: session.orgId, branchId },
+        include: { items: { include: { product: true } } },
+      });
+      if (!order) throw new Error("NOT_FOUND");
+      if (order.status !== "PENDING") throw new Error("NOT_PENDING");
+
+      // A different delivery address must still belong to this branch.
+      if (shipToAddressId && shipToAddressId !== order.shipToAddressId) {
+        const address = await tx.address.findFirst({
+          where: { id: shipToAddressId, orgId: session.orgId, locationId: branchId, isActive: true },
+        });
+        if (!address) throw new Error("BAD_ADDRESS");
+      }
+
+      const changes: string[] = [];
+      // productId → qty on the order after this edit, for the total.
+      const finalLines = new Map<string, { qty: number; unitPriceCents: number }>();
+
+      for (const item of order.items) {
+        const next = qtyById.has(item.id) ? qtyById.get(item.id)! : item.requestedQty;
+        if (next === 0) {
+          await tx.orderItem.delete({ where: { id: item.id } });
+          changes.push(`removed ${item.product.name}`);
+          continue;
+        }
+        if (next !== item.requestedQty) {
+          await tx.orderItem.update({ where: { id: item.id }, data: { requestedQty: next } });
+          changes.push(`${item.product.name} ${item.requestedQty} → ${next}`);
+        }
+        finalLines.set(item.productId, { qty: next, unitPriceCents: item.unitPriceCents });
+      }
+
+      if (mergeCart) {
+        const cart = await tx.cartItem.findMany({
+          where: { orgId: session.orgId, userId: session.userId },
+          include: { product: true },
+          orderBy: { createdAt: "asc" },
+        });
+        for (const line of cart) {
+          if (!line.product.active) throw new Error(`INACTIVE:${line.product.name}`);
+          const existing = order.items.find((it) => it.productId === line.productId);
+          if (existing && finalLines.has(line.productId)) {
+            // Already on the order (and not removed above) — top it up.
+            const current = finalLines.get(line.productId)!;
+            const next = current.qty + line.qty;
+            await tx.orderItem.update({ where: { id: existing.id }, data: { requestedQty: next } });
+            finalLines.set(line.productId, { ...current, qty: next });
+            changes.push(`${line.product.name} +${line.qty} from cart`);
+          } else {
+            await tx.orderItem.create({
+              data: {
+                orderId: order.id,
+                productId: line.productId,
+                requestedQty: line.qty,
+                unitPriceCents: line.product.priceCents,
+                note: line.note,
+              },
+            });
+            finalLines.set(line.productId, { qty: line.qty, unitPriceCents: line.product.priceCents });
+            changes.push(`added ${line.qty} × ${line.product.name}`);
+          }
+        }
+        if (cart.length > 0) {
+          await tx.cartItem.deleteMany({ where: { orgId: session.orgId, userId: session.userId } });
+        }
+      }
+
+      if (finalLines.size === 0) throw new Error("EMPTY");
+
+      const totalCents = [...finalLines.values()].reduce((s, l) => s + l.unitPriceCents * l.qty, 0);
+      if (shipToAddressId && shipToAddressId !== order.shipToAddressId) changes.push("delivery address");
+      if (deliveryNote !== undefined && (deliveryNote || null) !== order.deliveryNote) {
+        changes.push("delivery note");
+      }
+      if (changes.length === 0) throw new Error("NO_CHANGES");
+
+      await tx.order.update({
+        where: { id: order.id },
+        data: {
+          totalCents,
+          // Re-approved by the code just verified.
+          authCodeId: verified.codeId,
+          ...(shipToAddressId ? { shipToAddressId } : {}),
+          ...(deliveryNote !== undefined ? { deliveryNote: deliveryNote || null } : {}),
+        },
+      });
+
+      await logAudit(tx, {
+        orgId: session.orgId,
+        userId: session.userId,
+        userName: session.name,
+        action: `Edited ${orderCode(order.orderNo)} — ${changes.join("; ")}`,
+        entityType: "Order",
+        entityId: order.id,
+      });
+    });
+  } catch (e) {
+    const raw = e instanceof Error ? e.message : "";
+    if (raw === "NOT_FOUND") return { ok: false, error: "Order not found." };
+    if (raw === "NOT_PENDING") {
+      return { ok: false, error: "The warehouse has started on this order, so it can no longer be edited." };
+    }
+    if (raw === "BAD_ADDRESS") return { ok: false, error: "Choose a valid delivery address." };
+    if (raw === "EMPTY") return { ok: false, error: "An order needs at least one item. Cancel it instead." };
+    if (raw === "NO_CHANGES") return { ok: false, error: "Nothing was changed." };
+    if (raw.startsWith("INACTIVE:")) return { ok: false, error: `${raw.slice(9)} is no longer available.` };
+    return { ok: false, error: "Could not save your changes. Please try again." };
+  }
+
+  await notifyOrderEdited(orderId);
+
+  revalidatePath(`/purchase-manager/orders/${orderId}`);
+  revalidatePath("/purchase-manager/orders");
+  revalidatePath("/purchase-manager/cart");
+  revalidatePath("/purchase-manager/catalogue");
+  return { ok: true };
 }
 
 export async function cancelOrder(input: { orderId: string }) {

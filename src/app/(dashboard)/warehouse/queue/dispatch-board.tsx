@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { fmtDate, fmtDateTime } from "@/lib/format";
-import { startProcessing, applyDispatch } from "@/lib/actions/dispatch";
+import { startProcessing, applyDispatch, rejectOrder } from "@/lib/actions/dispatch";
 
 export type QueueItem = {
   id: string;
@@ -28,7 +28,15 @@ export type QueueOrder = {
 
 type Draft = Record<string, { dispatch: number; reason: string; eta: string; remark: string }>;
 
-export function DispatchBoard({ orders, reasons }: { orders: QueueOrder[]; reasons: string[] }) {
+export function DispatchBoard({
+  orders,
+  reasons,
+  rejectionReasons,
+}: {
+  orders: QueueOrder[];
+  reasons: string[];
+  rejectionReasons: string[];
+}) {
   if (orders.length === 0) {
     return (
       <div className="glass-surface rounded-xl p-12 text-center animate-scale-in">
@@ -45,7 +53,7 @@ export function DispatchBoard({ orders, reasons }: { orders: QueueOrder[]; reaso
   return (
     <div className="space-y-4 stagger-children">
       {orders.map((o) => (
-        <OrderCard key={o.id} order={o} reasons={reasons} />
+        <OrderCard key={o.id} order={o} reasons={reasons} rejectionReasons={rejectionReasons} />
       ))}
     </div>
   );
@@ -55,12 +63,27 @@ function lineMax(it: QueueItem) {
   return Math.min(it.requestedQty - it.deliveredQty, it.stock);
 }
 
-function OrderCard({ order, reasons }: { order: QueueOrder; reasons: string[] }) {
+function OrderCard({
+  order,
+  reasons,
+  rejectionReasons,
+}: {
+  order: QueueOrder;
+  reasons: string[];
+  rejectionReasons: string[];
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(order.status === "PROCESSING");
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState("");
   const [confirmClose, setConfirmClose] = useState(false);
+  const [rejecting, setRejecting] = useState(false);
+  const [rejectReason, setRejectReason] = useState("");
+  const [rejectNote, setRejectNote] = useState("");
+
+  // Once anything has physically left the warehouse the order has to be
+  // settled through dispatch (or brought back as a return), never rejected.
+  const nothingSent = order.items.every((it) => it.deliveredQty === 0);
 
   const [draft, setDraft] = useState<Draft>(() => {
     const d: Draft = {};
@@ -100,6 +123,22 @@ function OrderCard({ order, reasons }: { order: QueueOrder; reasons: string[] })
       const res = await applyDispatch({ orderId: order.id, closing, lines });
       if (!res.ok) setError(res.error);
       else router.refresh();
+    });
+  }
+
+  function reject() {
+    setError("");
+    startTransition(async () => {
+      const res = await rejectOrder({
+        orderId: order.id,
+        reason: rejectReason,
+        note: rejectNote || undefined,
+      });
+      if (!res.ok) setError(res.error);
+      else {
+        setRejecting(false);
+        router.refresh();
+      }
     });
   }
 
@@ -291,6 +330,61 @@ function OrderCard({ order, reasons }: { order: QueueOrder; reasons: string[] })
               )}
             </div>
           )}
+
+          {/* Reject — declines the whole order without moving any stock. */}
+          {nothingSent &&
+            (rejecting ? (
+              <div className="border border-out/25 bg-out-soft/40 rounded-xl p-4 space-y-3 animate-scale-in">
+                <div className="text-sm font-semibold text-ink">
+                  Reject {order.code} — {order.branchName} will be told why
+                </div>
+                <div className="grid sm:grid-cols-2 gap-3">
+                  <select
+                    value={rejectReason}
+                    onChange={(e) => setRejectReason(e.target.value)}
+                    className="w-full bg-bg border border-line rounded-lg px-2 h-9 text-sm focus:border-velvet outline-none cursor-pointer"
+                  >
+                    <option value="">Reason…</option>
+                    {rejectionReasons.map((r) => (
+                      <option key={r} value={r}>
+                        {r}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    value={rejectNote}
+                    onChange={(e) => setRejectNote(e.target.value)}
+                    maxLength={500}
+                    placeholder="Note for the branch (optional)"
+                    className="w-full bg-bg border border-line rounded-lg px-2 h-9 text-sm focus:border-velvet outline-none"
+                  />
+                </div>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={reject}
+                    disabled={pending || !rejectReason}
+                    className="h-9 px-4 rounded-lg bg-out text-white text-sm font-semibold disabled:opacity-40 cursor-pointer btn-press"
+                  >
+                    {pending ? "Rejecting…" : "Confirm rejection"}
+                  </button>
+                  <button
+                    onClick={() => setRejecting(false)}
+                    disabled={pending}
+                    className="text-sm text-muted hover:text-ink cursor-pointer"
+                  >
+                    Keep the order
+                  </button>
+                  <span className="text-xs text-faint">No stock moves and nothing is charged.</span>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={() => setRejecting(true)}
+                className="text-xs text-muted hover:text-out font-medium cursor-pointer"
+              >
+                Can&rsquo;t supply this order? Reject it
+              </button>
+            ))}
         </div>
       )}
     </div>

@@ -14,6 +14,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         orgName={orgName}
         items={[
           { label: "Overview", href: "/admin/overview", icon: "gauge" },
+          { label: "Reports", href: "/admin/reports", icon: "chart" },
           { label: "Products", href: "/admin/products", icon: "tag" },
           { label: "Users & salons", href: "/admin/users", icon: "users" },
           { label: "Auth codes", href: "/admin/codes", icon: "key" },

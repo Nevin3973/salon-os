@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireScopedSession } from "@/lib/tenant";
-import { orderCode, fmtDate, fmtDateTime } from "@/lib/format";
+import { orderCode, fmtDate, fmtDateTime, isVoided } from "@/lib/format";
 import { formatMoney } from "@/lib/money";
 import { StatusChip } from "@/components/status-chip";
 import { OrderActions } from "./order-actions";
+import { EditOrder } from "./edit-order";
 
 export default async function OrderDetailPage({
   params,
@@ -31,13 +32,29 @@ export default async function OrderDetailPage({
   });
   if (!order) notFound();
 
+  // Only a pending order can still be amended, so only then do we pay for the
+  // address book and cart lookups the edit panel needs.
+  const editable = order.status === "PENDING";
+  const [addresses, cartCount] = editable
+    ? await Promise.all([
+        db.address.findMany({
+          where: { locationId: session.locationId ?? undefined, isActive: true },
+          orderBy: [{ isDefault: "desc" }, { label: "asc" }],
+          select: { id: true, label: true, city: true },
+        }),
+        db.cartItem
+          .aggregate({ where: { userId: session.userId }, _sum: { qty: true } })
+          .then((a) => a._sum.qty ?? 0),
+      ])
+    : [[], 0];
+
   const totalReq = order.items.reduce((s, it) => s + it.requestedQty, 0);
   const totalDel = order.items.reduce((s, it) => s + it.deliveredQty, 0);
 
   // Build a simple delivery timeline from all deliveries across items.
   const timeline = order.items
     .flatMap((it) =>
-      it.deliveries.map((d) => ({ name: it.product.name, qty: d.qty, at: d.createdAt }))
+      it.deliveries.map((d) => ({ name: it.product.name, qty: d.qty, kind: d.kind, at: d.createdAt }))
     )
     .sort((a, b) => a.at.getTime() - b.at.getTime());
 
@@ -67,6 +84,36 @@ export default async function OrderDetailPage({
           <OrderActions orderId={order.id} status={order.status} />
         </div>
       </div>
+
+      {editable && (
+        <EditOrder
+          orderId={order.id}
+          lines={order.items.map((it) => ({
+            id: it.id,
+            name: it.product.name,
+            brand: it.product.brand,
+            unit: it.product.unit,
+            qty: it.requestedQty,
+            unitPriceCents: it.unitPriceCents,
+          }))}
+          addresses={addresses}
+          shipToAddressId={order.shipToAddressId}
+          deliveryNote={order.deliveryNote}
+          cartCount={cartCount}
+        />
+      )}
+
+      {(order.status === "REJECTED" || order.status === "RETURNED") && (
+        <div className="mt-4 bg-out-soft border border-out/25 rounded-xl px-4 py-3 text-sm">
+          <span className="font-medium text-ink">
+            {order.status === "REJECTED"
+              ? "The warehouse could not accept this order."
+              : "This order was returned to the warehouse."}
+          </span>
+          {order.closureReason && <span className="text-muted"> {order.closureReason}.</span>}
+          {order.closureNote && <div className="text-faint italic mt-1">“{order.closureNote}”</div>}
+        </div>
+      )}
 
       {(order.shipToAddress || order.deliveryNote) && (
         <div className="bg-surface border border-line rounded-xl p-4 mt-4 text-sm">
@@ -137,7 +184,7 @@ export default async function OrderDetailPage({
                 </div>
               </div>
 
-              {!done && order.status !== "CANCELLED" && (
+              {!done && !isVoided(order.status) && (
                 <div className="text-xs text-low mt-2">
                   {outstanding} outstanding
                   {it.outstandingReason ? ` · ${it.outstandingReason}` : ""}
@@ -145,9 +192,18 @@ export default async function OrderDetailPage({
                 </div>
               )}
 
+              {it.returnedQty > 0 && (
+                <div className="text-xs text-out mt-2">{it.returnedQty} returned to the warehouse</div>
+              )}
+
               {it.deliveries.length > 0 && (
                 <div className="text-xs text-faint mt-2">
-                  {it.deliveries.map((d) => `${d.qty} on ${fmtDateTime(d.createdAt)}`).join(" · ")}
+                  {it.deliveries
+                    .map(
+                      (d) =>
+                        `${d.kind === "RETURN" ? "−" : ""}${d.qty} on ${fmtDateTime(d.createdAt)}`
+                    )
+                    .join(" · ")}
                 </div>
               )}
             </div>
@@ -162,8 +218,15 @@ export default async function OrderDetailPage({
           <ol className="relative border-l border-line ml-2 space-y-4">
             {timeline.map((t, i) => (
               <li key={i} className="ml-4">
-                <span className="absolute -left-1.5 w-3 h-3 rounded-full bg-velvet border-2 border-bg" />
-                <div className="text-sm">{t.qty} × {t.name}</div>
+                <span
+                  className={`absolute -left-1.5 w-3 h-3 rounded-full border-2 border-bg ${
+                    t.kind === "RETURN" ? "bg-out" : "bg-velvet"
+                  }`}
+                />
+                <div className="text-sm">
+                  {t.kind === "RETURN" ? "Returned " : ""}
+                  {t.qty} × {t.name}
+                </div>
                 <div className="text-xs text-faint">{fmtDateTime(t.at)}</div>
               </li>
             ))}

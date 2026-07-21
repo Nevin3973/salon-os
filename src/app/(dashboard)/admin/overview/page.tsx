@@ -1,6 +1,6 @@
 import { requireScopedSession } from "@/lib/tenant";
 import { reservedByProduct, availableOf, stockState } from "@/lib/stock";
-import { fmtDate, orderCode } from "@/lib/format";
+import { fmtDate, orderCode, isVoided } from "@/lib/format";
 import { formatMoney } from "@/lib/money";
 import { StatusChip } from "@/components/status-chip";
 import Link from "next/link";
@@ -35,7 +35,7 @@ export default async function OverviewPage() {
   const branchCounts = new Map<string, number>();
   for (const b of branches) branchCounts.set(b.name, 0);
   for (const o of orders) {
-    if (o.status === "CANCELLED") continue;
+    if (isVoided(o.status)) continue;
     branchCounts.set(o.branch.name, (branchCounts.get(o.branch.name) ?? 0) + 1);
   }
   const maxBranch = Math.max(1, ...branchCounts.values());
@@ -67,11 +67,11 @@ export default async function OverviewPage() {
   for (const p of activeProducts) catCounts.set(p.category, (catCounts.get(p.category) ?? 0) + 1);
 
   const totalValueCents = orders
-    .filter((o) => o.status !== "CANCELLED")
+    .filter((o) => !isVoided(o.status))
     .reduce((s, o) => s + o.totalCents, 0);
 
   const kpis: [string, number | string][] = [
-    ["Total orders", orders.filter((o) => o.status !== "CANCELLED").length],
+    ["Total orders", orders.filter((o) => !isVoided(o.status)).length],
     ["Order value", formatMoney(totalValueCents)],
     ["Lines waiting on stock", outstandingLines],
     ["Low or out of stock", lowOrOut],

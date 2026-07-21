@@ -9,10 +9,23 @@ const STATUS_LABEL: Record<string, string> = {
   COMPLETED: "Completed",
   PARTIALLY_FULFILLED: "Partially Fulfilled",
   CANCELLED: "Cancelled",
+  REJECTED: "Rejected",
+  RETURNED: "Returned",
 };
 
 export function statusLabel(status: string): string {
   return STATUS_LABEL[status] ?? status;
+}
+
+/**
+ * Statuses where the order never became real business, or stopped being it:
+ * the branch withdrew it, the warehouse declined it, or the goods came back.
+ * Excluded from spend, order counts and "still owed" figures alike.
+ */
+const VOID_STATUSES = new Set(["CANCELLED", "REJECTED", "RETURNED"]);
+
+export function isVoided(status: string): boolean {
+  return VOID_STATUSES.has(status);
 }
 
 export function fmtDate(d: Date | string | null | undefined): string {

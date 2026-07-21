@@ -306,6 +306,68 @@ textarea:focus-visible {
 }
 
 /* ═══════════════════════════════════════════════════════════
+   PRINT — "Save as PDF" for the reports page
+   The consoles are dark on screen; paper is not. Re-point the
+   tokens to an ink-on-white set so a printed report is legible
+   and cheap, and drop the chrome that means nothing on paper.
+   ═══════════════════════════════════════════════════════════ */
+
+@media print {
+  html,
+  body {
+    background: #fff !important;
+  }
+
+  .theme-ops,
+  .theme-analytics,
+  :root {
+    --color-bg: #ffffff;
+    --color-surface: #ffffff;
+    --color-surface-raised: #ffffff;
+    --color-glass: #ffffff;
+    --color-ink: #111111;
+    --color-muted: #333333;
+    --color-faint: #555555;
+    --color-line: #cccccc;
+    --color-line-soft: #e4e4e4;
+    --color-velvet: #6b5417;
+    --color-velvet-soft: #f4efe2;
+    --color-on-velvet: #ffffff;
+    --color-in: #2f6b28;
+    --color-low: #8a4d16;
+    --color-out: #972929;
+    --shadow-sm: none;
+    --shadow-md: none;
+    --shadow-lg: none;
+    color-scheme: light;
+  }
+
+  /* Sidebar, mobile bar, filters, download buttons — screen-only chrome. */
+  aside,
+  .no-print {
+    display: none !important;
+  }
+
+  main {
+    padding: 0 !important;
+    max-width: none !important;
+  }
+
+  .print-block {
+    break-inside: avoid;
+  }
+
+  /* Repeat table headers across page breaks. */
+  thead {
+    display: table-header-group;
+  }
+
+  @page {
+    margin: 14mm;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════
    RESPONSIVE TABLE → CARD (mobile)
    ═══════════════════════════════════════════════════════════ */
 

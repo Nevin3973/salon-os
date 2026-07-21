@@ -54,6 +54,13 @@ const ICONS = {
     </>
   ),
   shield: <path d="M12 3l8 3v6c0 4.5-3.2 8-8 9-4.8-1-8-4.5-8-9V6z" />,
+  chart: <path d="M4 20V10m5 10V4m5 16v-7m5 7V8" />,
+  undo: (
+    <>
+      <path d="M9 14L4 9l5-5" />
+      <path d="M4 9h10a6 6 0 0 1 0 12h-3" />
+    </>
+  ),
 } as const;
 
 export function OpsShell({
@@ -153,7 +160,7 @@ export function OpsShell({
       </aside>
 
       {/* Mobile top bar + drawer */}
-      <div className="lg:hidden relative z-40 bg-surface border-b border-line flex items-center gap-3 px-4 h-14">
+      <div className="no-print lg:hidden relative z-40 bg-surface border-b border-line flex items-center gap-3 px-4 h-14">
         <button
           onClick={() => setMobileOpen((v) => !v)}
           aria-label="Menu"

@@ -51,6 +51,90 @@ export async function notifyNewOrder(orderId: string): Promise<void> {
   }
 }
 
+/**
+ * Tells the warehouse a pending order was amended before they picked it, so
+ * nobody works from a printout of the old quantities.
+ */
+export async function notifyOrderEdited(orderId: string): Promise<void> {
+  try {
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      include: { branch: { select: { name: true } }, items: { select: { requestedQty: true } } },
+    });
+    if (!order) return;
+
+    const to = await warehouseEmails(order.orgId);
+    if (to.length === 0) return;
+
+    const units = order.items.reduce((s, it) => s + it.requestedQty, 0);
+    await sendEmail({
+      to,
+      subject: `${orderCode(order.orderNo)} was changed by ${order.branch.name}`,
+      heading: `${order.branch.name} amended an order`,
+      lines: [
+        `${orderCode(order.orderNo)} is still waiting in your queue and has been edited.`,
+        `It now has ${order.items.length} product line${order.items.length === 1 ? "" : "s"} · ${units} unit${units === 1 ? "" : "s"} · ${formatMoney(order.totalCents)}.`,
+        "Check the queue before you pick it.",
+      ],
+      cta: { label: "Open the queue", url: `${appUrl()}/warehouse/queue` },
+    });
+  } catch (e) {
+    console.error("[notify] order edited failed:", e instanceof Error ? e.message : e);
+  }
+}
+
+/** Tells the salon the warehouse declined their order, and why. */
+export async function notifyRejected(orderId: string): Promise<void> {
+  try {
+    const order = await prisma.order.findUnique({ where: { id: orderId } });
+    if (!order) return;
+
+    const to = await userEmail(order.placedByUserId);
+    if (!to) return;
+
+    await sendEmail({
+      to,
+      subject: `${orderCode(order.orderNo)} was not accepted`,
+      heading: "The warehouse could not accept this order",
+      lines: [
+        `${orderCode(order.orderNo)} has been rejected and nothing will be dispatched against it.`,
+        order.closureReason ? `Reason: ${order.closureReason}.` : "",
+        order.closureNote ? `“${order.closureNote}”` : "",
+        "Nothing was charged and no stock was moved. You can reorder the items at any time.",
+      ].filter(Boolean),
+      cta: { label: "View the order", url: `${appUrl()}/purchase-manager/orders/${order.id}` },
+    });
+  } catch (e) {
+    console.error("[notify] rejected failed:", e instanceof Error ? e.message : e);
+  }
+}
+
+/** Confirms to the salon that returned goods were received back into stock. */
+export async function notifyReturn(orderId: string, units: number): Promise<void> {
+  try {
+    const order = await prisma.order.findUnique({ where: { id: orderId } });
+    if (!order) return;
+
+    const to = await userEmail(order.placedByUserId);
+    if (!to) return;
+
+    await sendEmail({
+      to,
+      subject: `Return received against ${orderCode(order.orderNo)}`,
+      heading: "Your return has been booked in",
+      lines: [
+        `The warehouse has received ${units} unit${units === 1 ? "" : "s"} back against ${orderCode(order.orderNo)}.`,
+        order.closureReason ? `Reason: ${order.closureReason}.` : "",
+        order.closureNote ? `“${order.closureNote}”` : "",
+        "The stock is back on the shelf and the order record has been updated.",
+      ].filter(Boolean),
+      cta: { label: "View the order", url: `${appUrl()}/purchase-manager/orders/${order.id}` },
+    });
+  } catch (e) {
+    console.error("[notify] return failed:", e instanceof Error ? e.message : e);
+  }
+}
+
 /** Tells the salon that stock has been sent (or the order settled). */
 export async function notifyDispatch(orderId: string): Promise<void> {
   try {

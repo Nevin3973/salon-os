@@ -5,7 +5,15 @@ import { getScopedDb } from "@/lib/tenant";
 import { resolveOrgContext, unauthorized, apiError } from "@/server/api/auth";
 import { serializeOrderSummary } from "@/server/api/serialize";
 
-const STATUSES = ["PENDING", "PROCESSING", "COMPLETED", "PARTIALLY_FULFILLED", "CANCELLED"];
+const STATUSES = [
+  "PENDING",
+  "PROCESSING",
+  "COMPLETED",
+  "PARTIALLY_FULFILLED",
+  "CANCELLED",
+  "REJECTED",
+  "RETURNED",
+];
 
 export async function GET(req: NextRequest) {
   const ctx = await resolveOrgContext(req);

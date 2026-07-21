@@ -1,5 +1,6 @@
 import { requireScopedSession } from "@/lib/tenant";
 import { fmtDateTime } from "@/lib/format";
+import { ExportButton } from "@/components/console-ui";
 import { AuditSearch } from "./audit-search";
 
 export default async function AdminAuditPage({
@@ -26,10 +27,16 @@ export default async function AdminAuditPage({
 
   return (
     <div>
-      <h1 className="text-2xl font-semibold">Audit log</h1>
-      <p className="text-muted text-sm mt-1 max-w-xl">
-        Everything that happens in this workspace, newest first.
-      </p>
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-semibold">Audit log</h1>
+          <p className="text-muted text-sm mt-1 max-w-xl">
+            Everything that happens in this workspace, newest first. The table shows the latest 200
+            entries; the export contains every one.
+          </p>
+        </div>
+        <ExportButton href="/api/exports/audit" />
+      </div>
 
       <div className="mt-5 max-w-sm">
         <AuditSearch initial={q ?? ""} />
