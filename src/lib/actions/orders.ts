@@ -9,6 +9,7 @@ import { logAudit } from "@/lib/audit";
 import { orderCode } from "@/lib/format";
 import { reservedByProduct, availableOf } from "@/lib/stock";
 import { takeToken, resetTokens } from "@/lib/rate-limit";
+import { notifyNewOrder } from "@/lib/notify";
 
 export type PlaceOrderResult =
   | { ok: true; orderId: string; orderNo: number; code: string }
@@ -158,6 +159,9 @@ export async function placeOrder(input: {
 
       return { orderId: order.id, orderNo };
     });
+
+    // Best-effort, post-commit: never blocks or fails the placed order.
+    await notifyNewOrder(result.orderId);
 
     revalidatePath("/purchase-manager/orders");
     revalidatePath("/purchase-manager/catalogue");

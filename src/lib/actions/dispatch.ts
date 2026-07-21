@@ -8,6 +8,7 @@ import { requireSession, setOrgConfig } from "@/lib/tenant";
 import { logAudit } from "@/lib/audit";
 import { orderCode, fmtDate } from "@/lib/format";
 import { allocateDispatch } from "@/lib/allocation";
+import { notifyDispatch } from "@/lib/notify";
 
 export type DispatchResult = { ok: true } | { ok: false; error: string; itemId?: string };
 
@@ -206,6 +207,8 @@ export async function applyDispatch(input: {
     }
     return { ok: false, error: msg(e) };
   }
+
+  await notifyDispatch(orderId);
 
   revalidatePath("/warehouse/queue");
   revalidatePath("/warehouse/outstanding");

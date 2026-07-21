@@ -68,6 +68,7 @@ model User {
   updatedAt    DateTime @default(now()) @updatedAt
 
   memberships Membership[]
+  resetTokens PasswordResetToken[]
 }
 
 // Shipping/delivery addresses. Scoped to an org; optionally pinned to a
@@ -297,6 +298,21 @@ model ApiKey {
   createdAt       DateTime  @default(now())
 
   @@index([orgId])
+}
+
+/// One-time tokens for "set your password" (invite) and "reset your password".
+/// Only a SHA-256 hash is stored, so a database leak cannot be replayed.
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  purpose   String    @default("reset") // "reset" | "invite"
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
 }
 
 model AuditLogEntry {
