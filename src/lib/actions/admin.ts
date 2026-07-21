@@ -102,6 +102,50 @@ export async function createProduct(input: {
   return { ok: true };
 }
 
+const imageSchema = z.object({
+  productId: z.string().min(1),
+  imageUrl: z
+    .string()
+    .url()
+    .max(500)
+    .refine((u) => u.startsWith("https://res.cloudinary.com/"), {
+      message: "Image must come from the upload service.",
+    }),
+});
+
+/** Saves an uploaded photo against a product. The upload itself happens in the
+ *  browser (unsigned Cloudinary preset); this is where permission is enforced. */
+export async function setProductImage(input: {
+  productId: string;
+  imageUrl: string;
+}): Promise<AdminResult> {
+  const parsed = imageSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid image." };
+  }
+  const { session, db } = await requireScopedSession("SUPER_ADMIN");
+
+  const product = await db.product.findFirst({ where: { id: parsed.data.productId } });
+  if (!product) return { ok: false, error: "Product not found." };
+
+  await db.product.update({
+    where: { id: product.id },
+    data: { imageUrl: parsed.data.imageUrl },
+  });
+  await logAudit(prisma, {
+    orgId: session.orgId,
+    userId: session.userId,
+    userName: session.name,
+    action: `Updated the photo for ${product.name}`,
+    entityType: "Product",
+    entityId: product.id,
+  });
+
+  revalidatePath("/admin/products");
+  revalidatePath("/purchase-manager/catalogue");
+  return { ok: true };
+}
+
 // ————— Users —————
 
 const userSchema = z.object({
