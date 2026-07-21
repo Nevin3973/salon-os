@@ -15,7 +15,7 @@ const inputCls =
 export function UsersPanel({ members, locations }: { members: Member[]; locations: Loc[] }) {
   const router = useRouter();
   const [adding, setAdding] = useState(false);
-  const [issued, setIssued] = useState<{ email: string; password: string } | null>(null);
+  const [issued, setIssued] = useState<{ email: string; password: string; invited: boolean } | null>(null);
 
   return (
     <div className="mt-5">
@@ -32,10 +32,25 @@ export function UsersPanel({ members, locations }: { members: Member[]; location
 
       {issued && (
         <div className="bg-surface border border-velvet/40 rounded-[10px] p-5 mb-4">
-          <div className="font-medium">One-time password for {issued.email}</div>
+          <div className="font-medium">
+            {issued.invited
+              ? `Invite emailed to ${issued.email}`
+              : `One-time password for ${issued.email}`}
+          </div>
+          {issued.invited ? (
+            <p className="text-muted text-sm mt-1.5">
+              They&rsquo;ll get a link to choose their own password (valid for 7 days). The
+              backup one-time password below also works if they don&rsquo;t receive the email.
+            </p>
+          ) : (
+            <p className="text-muted text-sm mt-1.5">
+              We couldn&rsquo;t send the invite email — share this one-time password with them
+              directly instead.
+            </p>
+          )}
           <div className="font-mono text-lg tracking-wider mt-2 select-all">{issued.password}</div>
           <p className="text-faint text-xs mt-2">
-            Share it safely. It works once — they must set their own password at first sign-in.
+            It works once — they must set their own password at first sign-in.
             You won&rsquo;t see it again after leaving this page.
           </p>
         </div>
@@ -87,7 +102,7 @@ function AddUserForm({
   onCancel,
 }: {
   locations: Loc[];
-  onDone: (issued: { email: string; password: string } | null) => void;
+  onDone: (issued: { email: string; password: string; invited: boolean } | null) => void;
   onCancel: () => void;
 }) {
   const [form, setForm] = useState({
@@ -118,7 +133,11 @@ function AddUserForm({
         setError(res.error);
         return;
       }
-      onDone(res.data?.tempPassword ? { email: form.email, password: res.data.tempPassword } : null);
+      onDone(
+        res.data?.tempPassword
+          ? { email: form.email, password: res.data.tempPassword, invited: Boolean(res.data.invited) }
+          : null
+      );
     });
   }
 

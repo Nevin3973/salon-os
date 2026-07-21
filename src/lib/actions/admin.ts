@@ -9,6 +9,8 @@ import { prisma } from "@/lib/db";
 import { requireScopedSession, withOrg } from "@/lib/tenant";
 import { logAudit } from "@/lib/audit";
 import { productImageUrl } from "@/lib/product-image";
+import { sendInviteEmail } from "@/lib/actions/password";
+import { activeOrgName } from "@/lib/tenant";
 
 export type AdminResult<T = undefined> =
   | { ok: true; data?: T }
@@ -160,7 +162,7 @@ export async function createUserWithMembership(input: {
   email: string;
   role: Role;
   locationId?: string;
-}): Promise<AdminResult<{ tempPassword: string }>> {
+}): Promise<AdminResult<{ tempPassword: string; invited: boolean }>> {
   const parsed = userSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Check the user details." };
@@ -211,9 +213,25 @@ export async function createUserWithMembership(input: {
     entityId: user.id,
   });
 
+  // Email an invite so the new person sets their own password. The temp
+  // password stays as a fallback the admin can read out if mail is down.
+  let invited = false;
+  if (!existingUser) {
+    const orgName = await activeOrgName();
+    invited = await sendInviteEmail({
+      email: user.email,
+      name: user.name,
+      userId: user.id,
+      orgName: orgName || "your workspace",
+    });
+  }
+
   revalidatePath("/admin/users");
   // For an existing user we never reveal a password (we didn't change it).
-  return { ok: true, data: { tempPassword: existingUser ? "" : tempPassword } };
+  return {
+    ok: true,
+    data: { tempPassword: existingUser ? "" : tempPassword, invited },
+  };
 }
 
 // ————— Authorization codes —————

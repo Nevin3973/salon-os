@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
+import Link from "next/link";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -63,6 +64,12 @@ export default function LoginPage() {
             </label>
 
             {error && <p className="text-out text-sm mt-4">{error}</p>}
+
+            <div className="text-right mt-2">
+              <Link href="/forgot-password" className="text-xs text-muted hover:text-velvet">
+                Forgot your password?
+              </Link>
+            </div>
 
             <button
               type="submit"

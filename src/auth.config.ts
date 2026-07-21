@@ -72,7 +72,11 @@ export const authConfig: NextAuthConfig = {
       const isLoggedIn = Boolean(auth?.user);
       const { pathname } = request.nextUrl;
 
-      const isPublic = pathname === "/login" || pathname.startsWith("/api/auth");
+      const isPublic =
+        pathname === "/login" ||
+        pathname === "/forgot-password" ||
+        pathname === "/reset-password" ||
+        pathname.startsWith("/api/auth");
       if (isPublic) return true;
       if (!isLoggedIn) return false;
 
