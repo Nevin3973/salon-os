@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { requireScopedSession } from "@/lib/tenant";
 import { reservedByProduct, availableOf, stockState } from "@/lib/stock";
 import { formatMoney } from "@/lib/money";
+import { optimizedImage } from "@/lib/cloudinary";
 import { BuyPanel } from "./buy-panel";
 import { ProductCard } from "../../catalogue/product-card";
 
@@ -72,7 +73,7 @@ export default async function ProductDetailPage({
           <div className="bg-white border border-line rounded-sm grid place-items-center aspect-square overflow-hidden">
             {product.imageUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={product.imageUrl} alt={product.name} className="w-full h-full object-contain p-4" />
+              <img src={optimizedImage(product.imageUrl, 800)} alt={product.name} className="w-full h-full object-contain p-4" />
             ) : (
               <div className="w-full h-full grid place-items-center" style={{ background: tint(product.category) }}>
                 <span className="text-7xl font-bold text-velvet/30">{product.brand.charAt(0)}</span>

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { addToCart } from "@/lib/actions/cart";
 import { formatMoney } from "@/lib/money";
+import { optimizedImage } from "@/lib/cloudinary";
 import type { StockState } from "@/lib/stock";
 
 type Product = {
@@ -53,7 +54,7 @@ export function ProductCard({ product }: { product: Product }) {
         <div className="h-40 rounded-sm grid place-items-center mb-2.5 bg-white overflow-hidden">
           {product.imageUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={product.imageUrl} alt={product.name} className="w-full h-full object-contain p-2" />
+            <img src={optimizedImage(product.imageUrl, 400)} alt={product.name} className="w-full h-full object-contain p-2" />
           ) : (
             <div className="w-full h-full grid place-items-center" style={{ background: tint(product.category) }}>
               <span className="text-4xl font-bold text-velvet/40">{product.brand.charAt(0)}</span>

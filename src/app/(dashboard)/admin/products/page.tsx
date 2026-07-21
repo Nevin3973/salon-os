@@ -26,6 +26,7 @@ export default async function AdminProductsPage() {
           unit: p.unit,
           stock: p.stock,
           priceCents: p.priceCents,
+          imageUrl: p.imageUrl,
           active: p.active,
         }))}
         categories={categories}

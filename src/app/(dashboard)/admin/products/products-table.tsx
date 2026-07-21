@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toggleProductActive, createProduct } from "@/lib/actions/admin";
 import { formatMoney, parseMoneyToMinor } from "@/lib/money";
+import { ProductImageCell } from "./image-upload";
 
 type Row = {
   id: string;
@@ -14,6 +15,7 @@ type Row = {
   unit: string;
   stock: number;
   priceCents: number;
+  imageUrl: string | null;
   active: boolean;
 };
 
@@ -59,6 +61,7 @@ export function ProductsTable({ products, categories }: { products: Row[]; categ
         <table className="w-full text-sm">
           <thead>
             <tr className="text-left text-[11px] uppercase tracking-[0.1em] text-faint">
+              <th className="font-medium px-4 py-3">Photo</th>
               <th className="font-medium px-4 py-3">SKU</th>
               <th className="font-medium px-4 py-3">Product</th>
               <th className="font-medium px-4 py-3">Category</th>
@@ -71,6 +74,9 @@ export function ProductsTable({ products, categories }: { products: Row[]; categ
           <tbody>
             {products.map((p) => (
               <tr key={p.id} className={`border-t border-line-soft ${p.active ? "" : "opacity-50"}`}>
+                <td className="px-4 py-3">
+                  <ProductImageCell productId={p.id} name={p.name} imageUrl={p.imageUrl} />
+                </td>
                 <td className="px-4 py-3 text-faint text-xs tracking-wide">{p.sku}</td>
                 <td className="px-4 py-3">
                   <div className="font-medium">{p.name}</div>
