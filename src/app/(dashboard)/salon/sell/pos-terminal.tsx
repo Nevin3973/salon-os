@@ -19,7 +19,7 @@ export type Sellable = {
   onHand: number;
 };
 
-/** Per-unit price the customer pays, GST included — for the product card. */
+/** Per-unit price the customer pays, GST included — shown on the tile. */
 function inclusive(p: Sellable): number {
   return lineGst(p.retailPriceCents, 1, p.gstRate).totalCents;
 }
@@ -27,9 +27,15 @@ function inclusive(p: Sellable): number {
 export function PosTerminal({ items }: { items: Sellable[] }) {
   const router = useRouter();
   const byId = useMemo(() => new Map(items.map((i) => [i.productId, i])), [items]);
+  const categories = useMemo(
+    () => ["All", ...Array.from(new Set(items.map((i) => i.category))).sort()],
+    [items]
+  );
 
   const [cart, setCart] = useState<Map<string, number>>(new Map());
   const [search, setSearch] = useState("");
+  const [cat, setCat] = useState("All");
+  const [showCustomer, setShowCustomer] = useState(false);
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [paymentMode, setPaymentMode] = useState<PaymentModeValue>("CASH");
@@ -37,14 +43,15 @@ export function PosTerminal({ items }: { items: Sellable[] }) {
   const [pending, startTransition] = useTransition();
 
   const q = search.trim().toLowerCase();
-  const shown = q
-    ? items.filter(
-        (i) =>
-          i.name.toLowerCase().includes(q) ||
-          i.brand.toLowerCase().includes(q) ||
-          i.category.toLowerCase().includes(q)
-      )
-    : items;
+  const shown = items.filter((i) => {
+    if (cat !== "All" && i.category !== cat) return false;
+    if (!q) return true;
+    return (
+      i.name.toLowerCase().includes(q) ||
+      i.brand.toLowerCase().includes(q) ||
+      i.category.toLowerCase().includes(q)
+    );
+  });
 
   function setQty(productId: string, qty: number) {
     setError("");
@@ -57,15 +64,15 @@ export function PosTerminal({ items }: { items: Sellable[] }) {
       return next;
     });
   }
-
   const add = (productId: string) => setQty(productId, (cart.get(productId) ?? 0) + 1);
 
   const lines = [...cart.entries()].map(([productId, qty]) => {
     const p = byId.get(productId)!;
-    const g = lineGst(p.retailPriceCents, qty, p.gstRate);
-    return { p, qty, ...g };
+    return { p, qty, ...lineGst(p.retailPriceCents, qty, p.gstRate) };
   });
-  const totals = billTotals(lines.map((l) => ({ unitPriceCents: l.p.retailPriceCents, qty: l.qty, gstRate: l.p.gstRate })));
+  const totals = billTotals(
+    lines.map((l) => ({ unitPriceCents: l.p.retailPriceCents, qty: l.qty, gstRate: l.p.gstRate }))
+  );
   const unitCount = lines.reduce((s, l) => s + l.qty, 0);
 
   function complete() {
@@ -84,22 +91,41 @@ export function PosTerminal({ items }: { items: Sellable[] }) {
   }
 
   return (
-    <div>
-      <h1 className="text-2xl font-semibold">Sell to a customer</h1>
-      <p className="text-muted text-sm mt-1">
-        Pick products from your shelf, take the customer’s details, and raise a GST bill.
-      </p>
+    <div className="-mx-4 sm:-mx-8 -my-6 sm:-my-8">
+      <div className="lg:grid lg:grid-cols-[1fr_380px] lg:h-[calc(100vh-0px)]">
+        {/* ————— Product picker ————— */}
+        <div className="flex flex-col min-h-0 lg:h-full lg:overflow-hidden px-4 sm:px-8 pt-6">
+          <div className="flex items-baseline justify-between gap-3">
+            <h1 className="text-xl font-semibold">Sell to a customer</h1>
+            <span className="text-xs text-faint">{shown.length} product{shown.length === 1 ? "" : "s"}</span>
+          </div>
 
-      <div className="grid lg:grid-cols-[1fr_360px] gap-5 mt-5 items-start">
-        {/* Product picker */}
-        <div>
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search your shelf…"
-            className="w-full bg-surface border border-line rounded-lg px-4 h-11 text-sm text-ink focus:border-velvet outline-none transition-colors"
+            className="mt-3 w-full bg-surface border border-line rounded-xl px-4 h-12 text-base text-ink focus:border-velvet outline-none transition-colors"
           />
-          <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-3 mt-4">
+
+          {/* Category rail — tap to filter fast */}
+          <div className="flex gap-2 mt-3 overflow-x-auto no-scrollbar pb-1 shrink-0">
+            {categories.map((c) => (
+              <button
+                key={c}
+                onClick={() => setCat(c)}
+                className={`shrink-0 h-10 px-4 rounded-full text-sm font-semibold border transition-colors select-none ${
+                  cat === c
+                    ? "bg-velvet text-on-velvet border-velvet"
+                    : "bg-surface border-line text-muted active:bg-velvet-soft"
+                }`}
+              >
+                {c}
+              </button>
+            ))}
+          </div>
+
+          {/* Tiles */}
+          <div className="mt-3 pb-28 lg:pb-6 lg:overflow-y-auto grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-2.5 auto-rows-min">
             {shown.map((p) => {
               const inCart = cart.get(p.productId) ?? 0;
               const soldOut = inCart >= p.onHand;
@@ -108,114 +134,185 @@ export function PosTerminal({ items }: { items: Sellable[] }) {
                   key={p.productId}
                   onClick={() => add(p.productId)}
                   disabled={soldOut}
-                  className={`text-left bg-surface border rounded-xl p-3.5 transition-colors ${
-                    inCart > 0 ? "border-velvet" : "border-line hover:border-velvet/40"
-                  } ${soldOut ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+                  className={`relative text-left bg-surface border rounded-2xl p-3 min-h-[104px] flex flex-col justify-between transition-all select-none active:scale-[0.97] ${
+                    inCart > 0 ? "border-velvet ring-2 ring-velvet/20" : "border-line active:border-velvet/50"
+                  } ${soldOut ? "opacity-45" : ""}`}
                 >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="font-medium text-sm truncate">{p.name}</div>
-                      <div className="text-xs text-faint truncate">{p.brand}</div>
-                    </div>
-                    {inCart > 0 && (
-                      <span className="shrink-0 min-w-5 h-5 px-1.5 grid place-items-center rounded-full bg-velvet text-on-velvet text-[11px] font-bold">
-                        {inCart}
-                      </span>
-                    )}
+                  {inCart > 0 && (
+                    <span className="absolute -top-2 -right-2 min-w-7 h-7 px-2 grid place-items-center rounded-full bg-velvet text-on-velvet text-sm font-bold shadow-md">
+                      {inCart}
+                    </span>
+                  )}
+                  <div>
+                    <div className="font-semibold text-sm leading-tight line-clamp-2">{p.name}</div>
+                    <div className="text-xs text-faint mt-0.5 truncate">{p.brand}</div>
                   </div>
                   <div className="flex items-baseline justify-between mt-2">
-                    <span className="font-semibold text-sm tabular-nums">{formatMoney(inclusive(p))}</span>
-                    <span className="text-[11px] text-faint">{p.onHand} on shelf</span>
+                    <span className="font-bold text-base tabular-nums">{formatMoney(inclusive(p))}</span>
+                    <span className="text-[11px] text-faint tabular-nums">{p.onHand} left</span>
                   </div>
                 </button>
               );
             })}
             {shown.length === 0 && (
-              <p className="text-muted text-sm col-span-full py-8 text-center">Nothing matches “{search}”.</p>
+              <p className="text-muted text-sm col-span-full py-12 text-center">Nothing matches — try another category or search.</p>
             )}
           </div>
         </div>
 
-        {/* Bill */}
-        <div className="bg-surface border border-line rounded-xl p-4 lg:sticky lg:top-6">
-          <div className="font-semibold text-sm mb-3">
-            Current bill{unitCount > 0 ? ` · ${unitCount} unit${unitCount === 1 ? "" : "s"}` : ""}
-          </div>
-
-          {lines.length === 0 ? (
-            <p className="text-muted text-sm py-6 text-center">Tap products to add them here.</p>
-          ) : (
-            <div className="space-y-2.5 max-h-[38vh] overflow-y-auto -mx-1 px-1">
-              {lines.map((l) => (
-                <div key={l.p.productId} className="flex items-center gap-2">
-                  <div className="min-w-0 flex-1">
-                    <div className="text-sm truncate">{l.p.name}</div>
-                    <div className="text-[11px] text-faint tabular-nums">
-                      {formatMoney(l.p.retailPriceCents)} + {l.p.gstRate}% GST
-                    </div>
-                  </div>
-                  <Stepper
-                    value={l.qty}
-                    max={l.p.onHand}
-                    onChange={(n) => setQty(l.p.productId, n)}
-                  />
-                  <div className="w-20 text-right text-sm tabular-nums shrink-0">{formatMoney(l.totalCents)}</div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <div className="border-t border-line mt-3 pt-3 space-y-1.5 text-sm">
-            <Row label="Taxable value" value={formatMoney(totals.subtotalCents)} />
-            <Row label="GST" value={formatMoney(totals.taxCents)} />
-            <div className="flex justify-between font-semibold text-base pt-1">
-              <span>Total</span>
-              <span className="tabular-nums">{formatMoney(totals.totalCents)}</span>
-            </div>
-          </div>
-
-          <div className="border-t border-line mt-3 pt-3 space-y-2.5">
-            <input
-              value={customerName}
-              onChange={(e) => setCustomerName(e.target.value)}
-              placeholder="Customer name (optional)"
-              className="w-full bg-bg border border-line rounded-lg px-3 h-9 text-sm focus:border-velvet outline-none"
-            />
-            <input
-              value={customerPhone}
-              onChange={(e) => setCustomerPhone(e.target.value)}
-              placeholder="Phone (optional)"
-              inputMode="tel"
-              className="w-full bg-bg border border-line rounded-lg px-3 h-9 text-sm focus:border-velvet outline-none"
-            />
-            <div className="grid grid-cols-3 gap-1.5">
-              {PAYMENT_MODES.map((m) => (
-                <button
-                  key={m}
-                  onClick={() => setPaymentMode(m)}
-                  className={`h-9 rounded-lg text-xs font-semibold border transition-colors cursor-pointer ${
-                    paymentMode === m
-                      ? "bg-velvet text-on-velvet border-velvet"
-                      : "border-line text-muted hover:text-ink"
-                  }`}
-                >
-                  {PAYMENT_MODE_LABEL[m]}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {error && <p className="text-out text-xs mt-3">{error}</p>}
-
-          <button
-            onClick={complete}
-            disabled={pending || lines.length === 0}
-            className="mt-3 w-full h-11 rounded-lg bg-velvet text-on-velvet text-sm font-semibold hover:bg-velvet-dark transition-colors disabled:opacity-50 cursor-pointer"
-          >
-            {pending ? "Saving…" : `Complete sale · ${formatMoney(totals.totalCents)}`}
-          </button>
-        </div>
+        {/* ————— Bill panel (desktop / tablet) ————— */}
+        <aside className="hidden lg:flex flex-col h-full bg-surface border-l border-line">
+          <BillPanel
+            lines={lines}
+            totals={totals}
+            unitCount={unitCount}
+            setQty={setQty}
+            showCustomer={showCustomer}
+            setShowCustomer={setShowCustomer}
+            customerName={customerName}
+            setCustomerName={setCustomerName}
+            customerPhone={customerPhone}
+            setCustomerPhone={setCustomerPhone}
+            paymentMode={paymentMode}
+            setPaymentMode={setPaymentMode}
+            error={error}
+            pending={pending}
+            complete={complete}
+          />
+        </aside>
       </div>
+
+      {/* ————— Mobile: bill as a bottom sheet + sticky charge bar ————— */}
+      <MobileCheckout
+        lines={lines}
+        totals={totals}
+        unitCount={unitCount}
+        setQty={setQty}
+        showCustomer={showCustomer}
+        setShowCustomer={setShowCustomer}
+        customerName={customerName}
+        setCustomerName={setCustomerName}
+        customerPhone={customerPhone}
+        setCustomerPhone={setCustomerPhone}
+        paymentMode={paymentMode}
+        setPaymentMode={setPaymentMode}
+        error={error}
+        pending={pending}
+        complete={complete}
+      />
+    </div>
+  );
+}
+
+type Line = { p: Sellable; qty: number; netCents: number; taxCents: number; totalCents: number };
+type PanelProps = {
+  lines: Line[];
+  totals: { subtotalCents: number; taxCents: number; totalCents: number };
+  unitCount: number;
+  setQty: (id: string, qty: number) => void;
+  showCustomer: boolean;
+  setShowCustomer: (v: boolean) => void;
+  customerName: string;
+  setCustomerName: (v: string) => void;
+  customerPhone: string;
+  setCustomerPhone: (v: string) => void;
+  paymentMode: PaymentModeValue;
+  setPaymentMode: (v: PaymentModeValue) => void;
+  error: string;
+  pending: boolean;
+  complete: () => void;
+};
+
+function BillPanel(props: PanelProps) {
+  const { lines, totals, unitCount, setQty, showCustomer, setShowCustomer, customerName, setCustomerName,
+    customerPhone, setCustomerPhone, paymentMode, setPaymentMode, error, pending, complete } = props;
+
+  return (
+    <>
+      <div className="px-5 pt-5 pb-3 flex items-center justify-between border-b border-line shrink-0">
+        <span className="font-semibold">Current bill</span>
+        <span className="text-sm text-faint tabular-nums">{unitCount} unit{unitCount === 1 ? "" : "s"}</span>
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-3 py-3">
+        {lines.length === 0 ? (
+          <div className="h-full grid place-items-center text-center px-6">
+            <p className="text-muted text-sm">Tap products to add them here, then charge the customer.</p>
+          </div>
+        ) : (
+          <div className="space-y-1.5">
+            {lines.map((l) => (
+              <BillLine key={l.p.productId} line={l} setQty={setQty} />
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="border-t border-line px-5 py-4 space-y-3 shrink-0">
+        <div className="space-y-1 text-sm">
+          <Row label="Taxable" value={formatMoney(totals.subtotalCents)} />
+          <Row label="GST" value={formatMoney(totals.taxCents)} />
+        </div>
+
+        {showCustomer ? (
+          <div className="space-y-2">
+            <input value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="Customer name"
+              className="w-full bg-bg border border-line rounded-lg px-3 h-10 text-sm focus:border-velvet outline-none" />
+            <input value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} placeholder="Phone" inputMode="tel"
+              className="w-full bg-bg border border-line rounded-lg px-3 h-10 text-sm focus:border-velvet outline-none" />
+          </div>
+        ) : (
+          <button onClick={() => setShowCustomer(true)}
+            className="text-xs font-semibold text-velvet active:text-velvet-dark">+ Add customer details</button>
+        )}
+
+        <div className="grid grid-cols-3 gap-2">
+          {PAYMENT_MODES.map((m) => (
+            <button key={m} onClick={() => setPaymentMode(m)}
+              className={`h-11 rounded-xl text-sm font-bold border transition-colors select-none ${
+                paymentMode === m ? "bg-velvet text-on-velvet border-velvet" : "border-line text-muted active:bg-velvet-soft"
+              }`}>
+              {PAYMENT_MODE_LABEL[m]}
+            </button>
+          ))}
+        </div>
+
+        {error && <p className="text-out text-xs">{error}</p>}
+
+        <button onClick={complete} disabled={pending || lines.length === 0}
+          className="w-full h-14 rounded-2xl bg-velvet text-on-velvet font-bold text-lg flex items-center justify-between px-5 transition-all active:scale-[0.98] disabled:opacity-40 select-none">
+          <span>{pending ? "Saving…" : "Charge"}</span>
+          <span className="tabular-nums">{formatMoney(totals.totalCents)}</span>
+        </button>
+      </div>
+    </>
+  );
+}
+
+function BillLine({ line, setQty }: { line: Line; setQty: (id: string, qty: number) => void }) {
+  return (
+    <div className="flex items-center gap-2 bg-bg rounded-xl p-2">
+      <div className="min-w-0 flex-1 pl-1">
+        <div className="text-sm font-medium truncate">{line.p.name}</div>
+        <div className="text-[11px] text-faint tabular-nums">{formatMoney(line.totalCents)}</div>
+      </div>
+      <Stepper value={line.qty} max={line.p.onHand} onChange={(n) => setQty(line.p.productId, n)} />
+    </div>
+  );
+}
+
+function Stepper({ value, max, onChange }: { value: number; max: number; onChange: (n: number) => void }) {
+  return (
+    <div className="flex items-center gap-0.5 shrink-0 select-none">
+      <button onClick={() => onChange(value - 1)} aria-label="Less"
+        className="w-10 h-10 grid place-items-center rounded-lg bg-surface border border-line text-lg text-muted active:bg-velvet-soft active:scale-95">
+        −
+      </button>
+      <span className="w-8 text-center text-base font-bold tabular-nums">{value}</span>
+      <button onClick={() => onChange(value + 1)} disabled={value >= max} aria-label="More"
+        className="w-10 h-10 grid place-items-center rounded-lg bg-surface border border-line text-lg text-muted active:bg-velvet-soft active:scale-95 disabled:opacity-30">
+        +
+      </button>
     </div>
   );
 }
@@ -229,25 +326,38 @@ function Row({ label, value }: { label: string; value: string }) {
   );
 }
 
-function Stepper({ value, max, onChange }: { value: number; max: number; onChange: (n: number) => void }) {
+/** On phones the bill lives in a slide-up sheet; a sticky bar keeps the total
+ *  and the charge action one tap away at all times. */
+function MobileCheckout(props: PanelProps) {
+  const { lines, totals, unitCount } = props;
+  const [open, setOpen] = useState(false);
+
   return (
-    <div className="flex items-center border border-line rounded-lg h-8 shrink-0">
-      <button
-        onClick={() => onChange(value - 1)}
-        className="w-7 h-full grid place-items-center text-muted hover:text-ink cursor-pointer"
-        aria-label="Less"
-      >
-        −
-      </button>
-      <span className="w-7 text-center text-sm tabular-nums">{value}</span>
-      <button
-        onClick={() => onChange(value + 1)}
-        disabled={value >= max}
-        className="w-7 h-full grid place-items-center text-muted hover:text-ink disabled:opacity-40 cursor-pointer"
-        aria-label="More"
-      >
-        +
-      </button>
+    <div className="lg:hidden">
+      {/* Sticky bar */}
+      <div className="fixed bottom-0 inset-x-0 z-40 bg-surface border-t border-line px-3 py-2.5 flex items-center gap-2 no-print">
+        <button onClick={() => setOpen(true)} disabled={lines.length === 0}
+          className="h-12 px-4 rounded-xl border border-line font-semibold text-sm text-ink disabled:opacity-40 flex items-center gap-2 select-none">
+          <span className="min-w-6 h-6 px-1.5 grid place-items-center rounded-full bg-velvet text-on-velvet text-xs font-bold">{unitCount}</span>
+          Bill
+        </button>
+        <button onClick={() => (lines.length ? setOpen(true) : null)} disabled={lines.length === 0}
+          className="flex-1 h-12 rounded-xl bg-velvet text-on-velvet font-bold flex items-center justify-between px-4 disabled:opacity-40 select-none active:scale-[0.98] transition-transform">
+          <span>Charge</span>
+          <span className="tabular-nums">{formatMoney(totals.totalCents)}</span>
+        </button>
+      </div>
+
+      {/* Sheet */}
+      {open && (
+        <div className="fixed inset-0 z-50">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setOpen(false)} />
+          <div className="absolute inset-x-0 bottom-0 max-h-[88vh] flex flex-col bg-surface rounded-t-3xl border-t border-line animate-slide-up">
+            <div className="flex justify-center pt-3 pb-1"><span className="w-10 h-1.5 rounded-full bg-line" /></div>
+            <BillPanel {...props} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

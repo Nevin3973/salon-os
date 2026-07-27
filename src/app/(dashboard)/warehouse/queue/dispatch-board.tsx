@@ -205,26 +205,49 @@ function OrderCard({
                   <Metric label="Remaining" value={remaining} tone={remaining > 0 ? "" : "text-in"} />
                   <Metric label="In stock" value={it.stock} tone={stockLimited ? "text-low" : ""} />
 
-                  <div className="w-28">
+                  <div className="w-44">
                     <div className="text-[10px] uppercase tracking-wider text-faint font-medium mb-1.5">Dispatch now</div>
                     {order.status === "PROCESSING" && remaining > 0 ? (
                       <>
-                        <input
-                          type="number"
-                          min={0}
-                          max={max}
-                          value={line?.dispatch ?? 0}
-                          onChange={(e) =>
-                            setD(it.id, {
-                              dispatch: Math.max(0, Math.min(max, Number(e.target.value) || 0)),
-                            })
-                          }
-                          className="w-full bg-bg border border-line rounded-lg px-2 h-9 text-sm transition-all hover:border-velvet/30 focus:border-velvet focus:ring-2 focus:ring-velvet/10 outline-none"
-                          aria-label={`Dispatch quantity for ${it.name}, max ${max}`}
-                        />
-                        <div className="text-[10px] text-faint mt-1">
-                          max {max}
-                          {stockLimited && <span className="text-low font-medium"> · stock-limited</span>}
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            aria-label="One less"
+                            onClick={() => setD(it.id, { dispatch: Math.max(0, (line?.dispatch ?? 0) - 1) })}
+                            className="w-10 h-11 grid place-items-center rounded-lg bg-bg border border-line text-lg text-muted hover:border-velvet/40 active:scale-95 transition-all cursor-pointer"
+                          >
+                            −
+                          </button>
+                          <input
+                            type="number"
+                            min={0}
+                            max={max}
+                            value={line?.dispatch ?? 0}
+                            onChange={(e) =>
+                              setD(it.id, { dispatch: Math.max(0, Math.min(max, Number(e.target.value) || 0)) })
+                            }
+                            className="w-14 bg-bg border border-line rounded-lg px-1 h-11 text-center text-base font-semibold tabular-nums hover:border-velvet/30 focus:border-velvet focus:ring-2 focus:ring-velvet/10 outline-none"
+                            aria-label={`Dispatch quantity for ${it.name}, max ${max}`}
+                          />
+                          <button
+                            type="button"
+                            aria-label="One more"
+                            disabled={(line?.dispatch ?? 0) >= max}
+                            onClick={() => setD(it.id, { dispatch: Math.min(max, (line?.dispatch ?? 0) + 1) })}
+                            className="w-10 h-11 grid place-items-center rounded-lg bg-bg border border-line text-lg text-muted hover:border-velvet/40 active:scale-95 transition-all disabled:opacity-30 cursor-pointer"
+                          >
+                            +
+                          </button>
+                        </div>
+                        <div className="flex items-center gap-2 mt-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setD(it.id, { dispatch: max })}
+                            className="text-[11px] font-semibold text-velvet hover:text-velvet-dark cursor-pointer"
+                          >
+                            Max {max}
+                          </button>
+                          {stockLimited && <span className="text-[10px] text-low font-medium">stock-limited</span>}
                         </div>
                       </>
                     ) : (
