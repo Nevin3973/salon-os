@@ -84,6 +84,16 @@ export const authConfig: NextAuthConfig = {
       if (!auth?.activeOrgId) return false; // must pick an org first
 
       if (pathname.startsWith("/purchase-manager") && auth.activeRole !== "PURCHASE_MANAGER") return false;
+      if (pathname.startsWith("/salon")) {
+        // The counter (sell + own bills) is open to salon staff and managers;
+        // inventory and reports are manager-only.
+        const managerOnly = pathname.startsWith("/salon/inventory") || pathname.startsWith("/salon/reports");
+        if (managerOnly) {
+          if (auth.activeRole !== "PURCHASE_MANAGER") return false;
+        } else if (auth.activeRole !== "PURCHASE_MANAGER" && auth.activeRole !== "SALON_STAFF") {
+          return false;
+        }
+      }
       if (pathname.startsWith("/warehouse") && auth.activeRole !== "WAREHOUSE_MANAGER") return false;
       if (pathname.startsWith("/admin") && auth.activeRole !== "SUPER_ADMIN") return false;
 

@@ -2,7 +2,7 @@ import type { NextRequest } from "next/server";
 import type { OrderStatus, Role } from "@prisma/client";
 import { resolveOrgContext, unauthorized, apiError } from "@/server/api/auth";
 import { csvResponse } from "@/lib/csv";
-import { parseRange, ordersCsv, inventoryCsv, auditCsv, movementsCsv, type ReportScope } from "@/lib/reports";
+import { parseRange, ordersCsv, inventoryCsv, auditCsv, movementsCsv, salesCsv, type ReportScope } from "@/lib/reports";
 
 /**
  * CSV downloads. Reachable from the console (browser session) and from the
@@ -29,6 +29,7 @@ const ORDER_STATUSES: OrderStatus[] = [
 /** Roles allowed per dataset; `null` (API key) is always allowed. */
 const ALLOWED: Record<string, Role[]> = {
   orders: ["PURCHASE_MANAGER", "WAREHOUSE_MANAGER", "SUPER_ADMIN"],
+  sales: ["PURCHASE_MANAGER", "SUPER_ADMIN"],
   inventory: ["WAREHOUSE_MANAGER", "SUPER_ADMIN"],
   movements: ["WAREHOUSE_MANAGER", "SUPER_ADMIN"],
   audit: ["SUPER_ADMIN"],
@@ -68,6 +69,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ data
   switch (dataset) {
     case "orders":
       return csvResponse("orders", await ordersCsv(scope, range, (status as OrderStatus) || undefined));
+    case "sales":
+      return csvResponse("sales", await salesCsv(scope, range));
     case "inventory":
       return csvResponse("inventory", await inventoryCsv(scope));
     case "movements":

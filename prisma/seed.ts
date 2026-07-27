@@ -2,6 +2,51 @@ import { PrismaClient, LocationType, Role } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { productImageUrl } from "../src/lib/product-image";
 import { seedPriceMinor } from "../src/lib/seed-pricing";
+import { lineGst } from "../src/lib/gst";
+
+/** GST rate a category is billed at (whole percent). Cosmetics/salon goods are
+ *  mostly 18%; a few staples sit lower. */
+function categoryGst(category: string): number {
+  const low: Record<string, number> = { Consumables: 12, "Cleaning Supplies": 18, Furniture: 18 };
+  return low[category] ?? 18;
+}
+
+/** A plausible HSN code per category for the tax invoice. */
+function categoryHsn(category: string): string {
+  const map: Record<string, string> = {
+    "Hair Care": "3305",
+    "Hair Colour": "3305",
+    "Hair Treatments": "3305",
+    "Skin Care": "3304",
+    Facial: "3304",
+    Waxing: "3307",
+    "Nail Care": "3304",
+    "Retail Products": "3305",
+    Tools: "8201",
+    Electrical: "8516",
+    Furniture: "9402",
+    "Cleaning Supplies": "3402",
+    Consumables: "3401",
+  };
+  return map[category] ?? "3307";
+}
+
+/** Retail (pre-GST) price the salon charges the customer: a markup on the
+ *  procurement cost, rounded to a tidy rupee figure. */
+function retailPriceMinor(costCents: number): number {
+  const marked = Math.round(costCents * 1.55);
+  return Math.max(100, Math.round(marked / 100) * 100); // whole rupees, ≥ ₹1
+}
+
+/** Small deterministic hash → stable "random" numbers so a reseed is identical. */
+function hash(s: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0) / 0xffffffff;
+}
 
 // The seed writes without an org context, so it must use the owner
 // connection (DIRECT_URL) — the app role would be blocked by RLS.
@@ -130,9 +175,15 @@ async function seedOrg(opts: {
   pmNames: string[]; // one per branch, same length as branchNames
   wmName: string;
   adminName: string;
+  cashierName?: string; // optional counter-only user at the first branch
 }) {
   const org = await prisma.org.create({
-    data: { name: opts.name, slug: opts.slug },
+    data: {
+      name: opts.name,
+      slug: opts.slug,
+      legalName: `${opts.name} Pvt Ltd`,
+      gstin: `27${opts.slug.slice(0, 3).toUpperCase().padEnd(3, "X")}0000${opts.slug.length}Z5`,
+    },
   });
 
   const branches = [];
@@ -148,16 +199,20 @@ async function seedOrg(opts: {
   });
 
   const products = await Promise.all(
-    opts.products.map((p) =>
-      prisma.product.create({
+    opts.products.map((p) => {
+      const priceCents = seedPriceMinor(p.name, p.category);
+      return prisma.product.create({
         data: {
           ...p,
           orgId: org.id,
           imageUrl: productImageUrl(p.name, p.category),
-          priceCents: seedPriceMinor(p.name, p.category),
+          priceCents,
+          retailPriceCents: retailPriceMinor(priceCents),
+          gstRate: categoryGst(p.category),
+          hsn: categoryHsn(p.category),
         },
-      })
-    )
+      });
+    })
   );
 
   const passwordHash = await bcrypt.hash(DEMO_PASSWORD, 10);
@@ -175,6 +230,20 @@ async function seedOrg(opts: {
     });
     pmUsers.push(user);
     console.log(`  PM   ${opts.pmNames[i]} <${email}> — ${branches[i].name}`);
+  }
+
+  // Optional counter-only staff at the first branch, to demo the cashier view.
+  if (opts.cashierName) {
+    const cashEmail = `${emailSlug(opts.cashierName)}@${opts.slug}.demo`;
+    const cashUser = await prisma.user.upsert({
+      where: { email: cashEmail },
+      update: {},
+      create: { email: cashEmail, name: opts.cashierName, passwordHash },
+    });
+    await prisma.membership.create({
+      data: { userId: cashUser.id, orgId: org.id, role: Role.SALON_STAFF, locationId: branches[0].id },
+    });
+    console.log(`  CASH ${opts.cashierName} <${cashEmail}> — ${branches[0].name} (counter only)`);
   }
 
   const wmEmail = `${emailSlug(opts.wmName)}@${opts.slug}.demo`;
@@ -402,8 +471,117 @@ async function seedSampleOrders(ctx: SeededOrg) {
   console.log(`  ${SAMPLE_ORDERS.length} sample orders created (ORD-0001…ORD-${String(orderNo).padStart(4, "0")})`);
 }
 
+// ————————————————————————————————————————————————————————
+// Retail side: branch shelf stock + sample customer bills
+// ————————————————————————————————————————————————————————
+
+const SAMPLE_CUSTOMERS = [
+  "Aisha Khan", "Ritu Sharma", "Meera Nair", "Fatima Ali", "Priya Menon",
+  "Sana Iqbal", "Divya Rao", "Nadia H.", "Kavya Reddy", "Zoya M.",
+  "Walk-in customer", "Neha Gupta",
+];
+
+async function seedBranchStockAndSales(ctx: SeededOrg) {
+  const paymentModes = ["CASH", "CARD", "UPI"] as const;
+  const sellable = ctx.products.filter((p) => p.active && p.retailPriceCents > 0);
+  let saleNo = 0;
+
+  for (let bi = 0; bi < ctx.branches.length; bi++) {
+    const branch = ctx.branches[bi];
+    const pm = ctx.pmUsers[bi];
+    const shelf = new Map<string, number>();
+
+    // Opening shelf count for each sellable product.
+    for (const p of sellable) {
+      const base = 6 + Math.floor(hash(`${branch.id}:${p.id}`) * 20); // 6..25
+      shelf.set(p.id, base);
+      await prisma.branchStock.create({
+        data: { orgId: ctx.org.id, branchId: branch.id, productId: p.id, onHand: base },
+      });
+      await prisma.branchStockMovement.create({
+        data: {
+          orgId: ctx.org.id, branchId: branch.id, productId: p.id,
+          prevQty: 0, newQty: base, reason: "Opening stock", userId: pm.id,
+          createdAt: daysAgoDate(14, 8, 0),
+        },
+      });
+    }
+
+    // A spread of sample bills over the last ~12 days.
+    const billCount = 8 + Math.floor(hash(`bills:${branch.id}`) * 6); // 8..13
+    for (let s = 0; s < billCount; s++) {
+      const daysAgo = Math.floor(hash(`${branch.id}:sale:${s}`) * 12); // 0..11
+      const lineN = 1 + Math.floor(hash(`${branch.id}:sale:${s}:n`) * 3); // 1..3
+      const chosen: { p: (typeof sellable)[number]; qty: number }[] = [];
+      for (let l = 0; l < lineN; l++) {
+        const idx = Math.floor(hash(`${branch.id}:sale:${s}:l:${l}`) * sellable.length);
+        const p = sellable[idx];
+        if (!p || chosen.some((c) => c.p.id === p.id)) continue;
+        const have = shelf.get(p.id) ?? 0;
+        if (have <= 0) continue;
+        const qty = Math.min(have, 1 + Math.floor(hash(`${branch.id}:sale:${s}:q:${l}`) * 3)); // 1..3
+        chosen.push({ p, qty });
+      }
+      if (chosen.length === 0) continue;
+
+      saleNo++;
+      const createdAt = daysAgoDate(daysAgo, 12 + (s % 6), (s * 13) % 60);
+      const items = chosen.map(({ p, qty }) => {
+        const g = lineGst(p.retailPriceCents, qty, p.gstRate);
+        return {
+          productId: p.id, name: p.name, hsn: p.hsn, qty,
+          unitPriceCents: p.retailPriceCents, gstRate: p.gstRate,
+          lineNetCents: g.netCents, taxCents: g.taxCents, lineTotalCents: g.totalCents,
+          unitCostCents: p.priceCents,
+        };
+      });
+      const subtotalCents = items.reduce((n, it) => n + it.lineNetCents, 0);
+      const taxCents = items.reduce((n, it) => n + it.taxCents, 0);
+      const costCents = items.reduce((n, it) => n + it.unitCostCents * it.qty, 0);
+
+      const sale = await prisma.sale.create({
+        data: {
+          orgId: ctx.org.id, branchId: branch.id, invoiceNo: saleNo, soldByUserId: pm.id,
+          customerName: SAMPLE_CUSTOMERS[Math.floor(hash(`${branch.id}:cust:${s}`) * SAMPLE_CUSTOMERS.length)],
+          paymentMode: paymentModes[s % 3],
+          subtotalCents, taxCents, totalCents: subtotalCents + taxCents, costCents,
+          createdAt,
+          items: { create: items },
+        },
+      });
+
+      for (const { p, qty } of chosen) {
+        const prev = shelf.get(p.id)!;
+        const next = prev - qty;
+        shelf.set(p.id, next);
+        await prisma.branchStockMovement.create({
+          data: {
+            orgId: ctx.org.id, branchId: branch.id, productId: p.id,
+            prevQty: prev, newQty: next, reason: "Sale", refId: sale.id, userId: pm.id, createdAt,
+          },
+        });
+      }
+    }
+
+    // Persist the final shelf counts.
+    for (const [productId, onHand] of shelf) {
+      await prisma.branchStock.updateMany({
+        where: { branchId: branch.id, productId },
+        data: { onHand },
+      });
+    }
+  }
+
+  await prisma.org.update({ where: { id: ctx.org.id }, data: { saleSeq: saleNo } });
+  console.log(`  ${saleNo} sample bills created across ${ctx.branches.length} branch(es)`);
+}
+
 async function reset() {
   // Dev-only: clear all rows so the seed is re-runnable. Order matters for FKs.
+  await prisma.saleItem.deleteMany();
+  await prisma.sale.deleteMany();
+  await prisma.branchStockMovement.deleteMany();
+  await prisma.branchStock.deleteMany();
   await prisma.orderItemDelivery.deleteMany();
   await prisma.orderItem.deleteMany();
   await prisma.order.deleteMany();
@@ -442,11 +620,13 @@ async function main() {
     pmNames: ["Leila M.", "Sara N.", "Huda K."],
     wmName: "Omar D.",
     adminName: "A. Rahman",
+    cashierName: "Zara P.",
   });
   await seedSampleOrders(beyond);
+  await seedBranchStockAndSales(beyond);
 
   console.log("\nOrg: Bellissima Salon Group");
-  await seedOrg({
+  const bellissima = await seedOrg({
     name: "Bellissima Salon Group",
     slug: "bellissima",
     products: bellissimaProducts(),
@@ -456,6 +636,7 @@ async function main() {
     wmName: "Marco T.",
     adminName: "Elena V.",
   });
+  await seedBranchStockAndSales(bellissima);
 
   console.log("\nDone.");
 }

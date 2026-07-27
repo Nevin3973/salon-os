@@ -8,6 +8,7 @@ import { requireSession, setOrgConfig } from "@/lib/tenant";
 import { logAudit } from "@/lib/audit";
 import { orderCode, fmtDate } from "@/lib/format";
 import { allocateDispatch } from "@/lib/allocation";
+import { bumpBranchStock } from "@/lib/branch-stock";
 import { notifyDispatch, notifyRejected, notifyReturn } from "@/lib/notify";
 
 export type DispatchResult = { ok: true } | { ok: false; error: string; itemId?: string };
@@ -140,6 +141,16 @@ export async function applyDispatch(input: {
           });
           await tx.orderItemDelivery.create({
             data: { orderItemId: a.it.id, qty: a.q, dispatchedByUserId: session.userId },
+          });
+          // Goods delivered to the branch land on its shelf, ready to sell.
+          await bumpBranchStock(tx, {
+            orgId: session.orgId,
+            branchId: order.branchId,
+            productId: a.it.productId,
+            delta: a.q,
+            reason: "Delivery",
+            refId: order.id,
+            userId: session.userId,
           });
         }
         await tx.orderItem.update({
@@ -374,6 +385,18 @@ export async function returnOrder(input: {
             action: `Return · ${orderCode(order.orderNo)} ← ${order.branch.name} (${reason})`,
             refOrderId: order.id,
           },
+        });
+        // Take the same units off the branch shelf. Floor at zero: the salon
+        // may already have sold some, and the warehouse return is authoritative.
+        await bumpBranchStock(tx, {
+          orgId: session.orgId,
+          branchId: order.branchId,
+          productId: item.productId,
+          delta: -qty,
+          reason: "Return to warehouse",
+          refId: order.id,
+          userId: session.userId,
+          allowFloor: true,
         });
         detail.push(`${qty} × ${item.product.name}`);
       }

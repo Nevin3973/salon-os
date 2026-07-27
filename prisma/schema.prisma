@@ -23,7 +23,12 @@ model Org {
   name      String
   slug      String   @unique
   orderSeq  Int      @default(0) // per-org order number counter, bumped atomically in placeOrder
+  saleSeq   Int      @default(0) // per-org customer-invoice counter, bumped atomically in recordSale
   currency  String   @default("INR") // ISO code used for all money display in this org
+  /// GST registration number, printed on customer tax invoices.
+  gstin     String?
+  /// Registered legal name for the tax-invoice header (falls back to `name`).
+  legalName String?
   createdAt DateTime @default(now())
 
   locations   Location[]
@@ -35,6 +40,9 @@ model Org {
   movements   StockMovement[]
   addresses   Address[]
   apiKeys     ApiKey[]
+  sales       Sale[]
+  branchStock BranchStock[]
+  branchStockMovements BranchStockMovement[]
 }
 
 enum LocationType {
@@ -53,6 +61,9 @@ model Location {
   memberships Membership[]
   orders      Order[]
   addresses   Address[]
+  branchStock BranchStock[]
+  branchStockMovements BranchStockMovement[]
+  sales       Sale[]
 
   @@index([orgId, type])
 }
@@ -101,6 +112,8 @@ model Address {
 
 enum Role {
   PURCHASE_MANAGER
+  /// Salon counter staff: may sell and reprint their own bills, nothing else.
+  SALON_STAFF
   WAREHOUSE_MANAGER
   SUPER_ADMIN
 }
@@ -139,8 +152,15 @@ model Product {
   minStock Int     @default(0)
   active   Boolean @default(true)
   imageUrl String?
-  /// Unit price in the org's currency, stored in minor units (paise) to avoid float drift.
+  /// Price the branch pays the warehouse (procurement cost), minor units.
+  /// Doubles as the salon's cost basis when computing retail margin.
   priceCents Int   @default(0)
+  /// Price the salon charges the end customer, exclusive of GST, minor units.
+  retailPriceCents Int @default(0)
+  /// GST rate charged to the customer, as a whole percent (0/5/12/18/28).
+  gstRate  Int     @default(0)
+  /// HSN code printed on the customer's tax invoice.
+  hsn      String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -148,6 +168,9 @@ model Product {
   orderItems OrderItem[]
   movements  StockMovement[]
   cartItems  CartItem[]
+  branchStock BranchStock[]
+  branchStockMovements BranchStockMovement[]
+  saleItems  SaleItem[]
 
   @@unique([orgId, sku])
   @@index([orgId, active, category])
@@ -186,6 +209,124 @@ enum OrderStatus {
   REJECTED
   /// Every delivered unit came back and was restocked.
   RETURNED
+}
+
+enum SaleStatus {
+  COMPLETED
+  /// The bill was cancelled; its stock was returned to the branch shelf.
+  VOID
+}
+
+enum PaymentMode {
+  CASH
+  CARD
+  UPI
+}
+
+// ————————————————————————————————————————————————————————
+// Retail side: branch on-hand inventory and customer billing
+// ————————————————————————————————————————————————————————
+
+/// What a single branch currently holds on its shelf for one product. Topped
+/// up when a warehouse dispatch is delivered, drawn down when sold to a
+/// customer. Distinct from Product.stock, which is the warehouse's own stock.
+model BranchStock {
+  id        String   @id @default(cuid())
+  orgId     String
+  org       Org      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  branchId  String
+  branch    Location @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  onHand    Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  @@unique([branchId, productId])
+  @@index([orgId, branchId])
+  @@index([orgId, productId])
+}
+
+/// Append-only ledger of every change to a branch's on-hand stock, so a shelf
+/// count can always be reconciled the same way warehouse stock can.
+model BranchStockMovement {
+  id        String   @id @default(cuid())
+  orgId     String
+  org       Org      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  branchId  String
+  branch    Location @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  userId    String?
+  prevQty   Int
+  newQty    Int
+  /// "Delivery" | "Sale" | "Void sale" | "Return to warehouse" | "Adjustment"
+  reason    String
+  /// The order or sale that caused this movement, for traceability.
+  refId     String?
+  createdAt DateTime @default(now())
+
+  @@index([orgId, branchId, createdAt])
+  @@index([orgId, productId])
+}
+
+/// A customer bill raised at a branch. GST is computed per line and summed;
+/// prices and cost are snapshotted so later catalogue changes never rewrite
+/// history. A VOID sale returns its units to the branch shelf.
+model Sale {
+  id            String      @id @default(cuid())
+  orgId         String
+  org           Org         @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  branchId      String
+  branch        Location    @relation(fields: [branchId], references: [id])
+  invoiceNo     Int
+  soldByUserId  String
+  customerName  String?
+  customerPhone String?
+  status        SaleStatus  @default(COMPLETED)
+  paymentMode   PaymentMode @default(CASH)
+  /// Sum of line taxable values (pre-GST), minor units.
+  subtotalCents Int         @default(0)
+  /// Total GST across all lines (CGST + SGST), minor units.
+  taxCents      Int         @default(0)
+  /// subtotalCents + taxCents, minor units — what the customer pays.
+  totalCents    Int         @default(0)
+  /// Sum of procurement cost of the units sold, minor units — for margin.
+  costCents     Int         @default(0)
+  voidReason    String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  items SaleItem[]
+
+  @@unique([orgId, invoiceNo])
+  @@index([orgId, branchId, createdAt])
+  @@index([orgId, status])
+}
+
+model SaleItem {
+  id             String  @id @default(cuid())
+  saleId         String
+  sale           Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  productId      String
+  product        Product @relation(fields: [productId], references: [id])
+  /// Snapshots taken at sale time.
+  name           String
+  hsn            String?
+  qty            Int
+  /// Retail unit price, exclusive of GST, minor units.
+  unitPriceCents Int
+  gstRate        Int
+  /// qty × unitPriceCents — the taxable value of this line, minor units.
+  lineNetCents   Int
+  /// GST on this line (CGST + SGST together), minor units.
+  taxCents       Int
+  /// lineNetCents + taxCents, minor units.
+  lineTotalCents Int
+  /// Procurement unit cost snapshot, minor units — for margin reporting.
+  unitCostCents  Int     @default(0)
+
+  @@index([saleId])
+  @@index([productId])
 }
 
 model Order {

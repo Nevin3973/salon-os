@@ -2,9 +2,11 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { toggleProductActive, createProduct } from "@/lib/actions/admin";
+import { toggleProductActive, createProduct, setSalePricing } from "@/lib/actions/admin";
 import { formatMoney, parseMoneyToMinor } from "@/lib/money";
 import { ProductImageCell } from "./image-upload";
+
+const GST_RATES = [0, 5, 12, 18, 28];
 
 type Row = {
   id: string;
@@ -15,6 +17,9 @@ type Row = {
   unit: string;
   stock: number;
   priceCents: number;
+  retailPriceCents: number;
+  gstRate: number;
+  hsn: string | null;
   imageUrl: string | null;
   active: boolean;
 };
@@ -65,7 +70,8 @@ export function ProductsTable({ products, categories }: { products: Row[]; categ
               <th className="font-medium px-4 py-3">SKU</th>
               <th className="font-medium px-4 py-3">Product</th>
               <th className="font-medium px-4 py-3">Category</th>
-              <th className="font-medium px-4 py-3 text-right">Price</th>
+              <th className="font-medium px-4 py-3 text-right">Cost</th>
+              <th className="font-medium px-4 py-3 text-right">Retail (GST)</th>
               <th className="font-medium px-4 py-3 text-right">Stock</th>
               <th className="font-medium px-4 py-3">Status</th>
               <th className="px-4 py-3" />
@@ -84,6 +90,7 @@ export function ProductsTable({ products, categories }: { products: Row[]; categ
                 </td>
                 <td className="px-4 py-3 text-muted">{p.category}</td>
                 <td className="px-4 py-3 text-right tabular-nums">{formatMoney(p.priceCents)}</td>
+                <td className="px-4 py-3 text-right"><RetailCell row={p} /></td>
                 <td className="px-4 py-3 text-right tabular-nums">{p.stock}</td>
                 <td className="px-4 py-3">
                   <span className={p.active ? "text-in" : "text-faint"}>
@@ -128,6 +135,81 @@ export function ProductsTable({ products, categories }: { products: Row[]; categ
   );
 }
 
+function RetailCell({ row }: { row: Row }) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [price, setPrice] = useState(row.retailPriceCents ? String(row.retailPriceCents / 100) : "");
+  const [gstRate, setGstRate] = useState(row.gstRate);
+  const [hsn, setHsn] = useState(row.hsn ?? "");
+  const [error, setError] = useState("");
+  const [pending, startTransition] = useTransition();
+
+  function save() {
+    setError("");
+    startTransition(async () => {
+      const res = await setSalePricing({
+        productId: row.id,
+        retailPriceCents: parseMoneyToMinor(price) ?? 0,
+        gstRate,
+        hsn: hsn.trim() || undefined,
+      });
+      if (res.ok) { setOpen(false); router.refresh(); }
+      else setError(res.error);
+    });
+  }
+
+  if (!open) {
+    return (
+      <button
+        onClick={() => setOpen(true)}
+        className="text-right tabular-nums hover:text-velvet cursor-pointer"
+        title="Set retail price, GST and HSN"
+      >
+        {row.retailPriceCents > 0 ? (
+          <>
+            {formatMoney(row.retailPriceCents)}
+            <span className="text-faint text-xs"> · {row.gstRate}%</span>
+          </>
+        ) : (
+          <span className="text-out text-xs font-medium">Set price</span>
+        )}
+      </button>
+    );
+  }
+
+  return (
+    <div className="flex flex-wrap items-center justify-end gap-1.5 text-left">
+      <input
+        value={price}
+        onChange={(e) => setPrice(e.target.value)}
+        placeholder="Price"
+        aria-label="Retail price"
+        className="w-20 h-8 bg-bg border border-line rounded-[6px] px-2 text-sm text-right tabular-nums outline-none focus:border-velvet"
+      />
+      <select
+        value={gstRate}
+        onChange={(e) => setGstRate(Number(e.target.value))}
+        aria-label="GST rate"
+        className="h-8 bg-bg border border-line rounded-[6px] px-1 text-xs outline-none focus:border-velvet"
+      >
+        {GST_RATES.map((r) => <option key={r} value={r}>{r}%</option>)}
+      </select>
+      <input
+        value={hsn}
+        onChange={(e) => setHsn(e.target.value)}
+        placeholder="HSN"
+        aria-label="HSN code"
+        className="w-16 h-8 bg-bg border border-line rounded-[6px] px-2 text-xs outline-none focus:border-velvet"
+      />
+      <button onClick={save} disabled={pending} className="h-8 px-2.5 rounded-[6px] bg-velvet text-on-velvet text-xs font-semibold hover:bg-velvet-dark disabled:opacity-50 cursor-pointer">
+        {pending ? "…" : "Save"}
+      </button>
+      <button onClick={() => setOpen(false)} className="h-8 px-1.5 text-xs text-muted hover:text-ink cursor-pointer">✕</button>
+      {error && <span className="text-out text-[11px] w-full text-right">{error}</span>}
+    </div>
+  );
+}
+
 function AddProductForm({
   categories,
   onDone,
@@ -144,6 +226,9 @@ function AddProductForm({
     category: categories[0] ?? "",
     unit: "piece",
     price: "",
+    retailPrice: "",
+    gstRate: "18",
+    hsn: "",
     stock: "0",
     minStock: "0",
   });
@@ -161,6 +246,9 @@ function AddProductForm({
         category: form.category,
         unit: form.unit,
         priceCents: parseMoneyToMinor(form.price) ?? 0,
+        retailPriceCents: parseMoneyToMinor(form.retailPrice) ?? 0,
+        gstRate: Number(form.gstRate) || 0,
+        hsn: form.hsn.trim() || undefined,
         stock: Number(form.stock) || 0,
         minStock: Number(form.minStock) || 0,
       });
@@ -184,7 +272,14 @@ function AddProductForm({
           <datalist id="cats">{categories.map((c) => <option key={c} value={c} />)}</datalist>
         </L>
         <L label="Unit"><input value={form.unit} onChange={set("unit")} required className={inputCls} /></L>
-        <L label="Price (INR)"><input value={form.price} onChange={set("price")} placeholder="e.g. 1299" required className={inputCls} /></L>
+        <L label="Cost — from warehouse (INR)"><input value={form.price} onChange={set("price")} placeholder="e.g. 1299" required className={inputCls} /></L>
+        <L label="Retail — to customer (INR)"><input value={form.retailPrice} onChange={set("retailPrice")} placeholder="e.g. 1799" className={inputCls} /></L>
+        <L label="GST rate">
+          <select value={form.gstRate} onChange={set("gstRate")} className={inputCls}>
+            {GST_RATES.map((r) => <option key={r} value={r}>{r}%</option>)}
+          </select>
+        </L>
+        <L label="HSN code"><input value={form.hsn} onChange={set("hsn")} placeholder="optional" className={inputCls} /></L>
         <L label="Stock"><input type="number" min={0} value={form.stock} onChange={set("stock")} className={inputCls} /></L>
         <L label="Low-stock alert at"><input type="number" min={0} value={form.minStock} onChange={set("minStock")} className={inputCls} /></L>
       </div>

@@ -2,6 +2,8 @@ import type { OrderStatus } from "@prisma/client";
 import { getScopedDb } from "@/lib/tenant";
 import { reservedByProduct, availableOf, stockState } from "@/lib/stock";
 import { orderCode, statusLabel } from "@/lib/format";
+import { invoiceCode } from "@/lib/gst";
+import { PAYMENT_MODE_LABEL, type PaymentModeValue } from "@/lib/constants";
 import { toCsv, csvMoney, type CsvColumn } from "@/lib/csv";
 
 /**
@@ -335,4 +337,130 @@ export async function monthlySummary(scope: ReportScope, range: ReportRange): Pr
     branches: [...branches.values()].sort((a, b) => b.revenueCents - a.revenueCents),
     topProducts: [...products.values()].sort((a, b) => b.revenueCents - a.revenueCents).slice(0, 10),
   };
+}
+
+// ————————————————————————————————————————————————————————
+// Customer sales — the salon-manager billing report.
+// ————————————————————————————————————————————————————————
+
+export type SaleDayRow = { key: string; label: string; bills: number; revenueCents: number };
+export type SaleProductRow = { name: string; units: number; revenueCents: number; marginCents: number };
+export type PayRow = { mode: PaymentModeValue; label: string; bills: number; revenueCents: number };
+
+export type SalesSummary = {
+  range: ReportRange;
+  totals: {
+    bills: number;
+    units: number;
+    /** Taxable value billed to customers (pre-GST). */
+    netCents: number;
+    taxCents: number;
+    /** What customers paid (net + GST). */
+    grossCents: number;
+    /** net − cost of goods sold. */
+    marginCents: number;
+    voided: number;
+  };
+  days: SaleDayRow[];
+  payments: PayRow[];
+  topProducts: SaleProductRow[];
+};
+
+/** Only real, settled bills count towards revenue; VOID bills are excluded. */
+export async function salesSummary(scope: ReportScope, range: ReportRange): Promise<SalesSummary> {
+  const db = getScopedDb(scope.orgId);
+  const sales = await db.sale.findMany({
+    where: {
+      ...(scope.branchId ? { branchId: scope.branchId } : {}),
+      ...(createdAtFilter(range) ? { createdAt: createdAtFilter(range) } : {}),
+    },
+    include: { items: true },
+    orderBy: { createdAt: "desc" },
+  });
+
+  const totals: SalesSummary["totals"] = {
+    bills: 0, units: 0, netCents: 0, taxCents: 0, grossCents: 0, marginCents: 0, voided: 0,
+  };
+  const days = new Map<string, SaleDayRow>();
+  const payments = new Map<PaymentModeValue, PayRow>();
+  const products = new Map<string, SaleProductRow>();
+
+  for (const s of sales) {
+    if (s.status === "VOID") {
+      totals.voided++;
+      continue;
+    }
+    totals.bills++;
+    totals.netCents += s.subtotalCents;
+    totals.taxCents += s.taxCents;
+    totals.grossCents += s.totalCents;
+    totals.marginCents += s.subtotalCents - s.costCents;
+
+    const key = s.createdAt.toISOString().slice(0, 10);
+    const day = days.get(key) ?? { key, label: key, bills: 0, revenueCents: 0 };
+    day.bills++;
+    day.revenueCents += s.totalCents;
+    days.set(key, day);
+
+    const mode = s.paymentMode as PaymentModeValue;
+    const pay = payments.get(mode) ?? { mode, label: PAYMENT_MODE_LABEL[mode], bills: 0, revenueCents: 0 };
+    pay.bills++;
+    pay.revenueCents += s.totalCents;
+    payments.set(mode, pay);
+
+    for (const it of s.items) {
+      totals.units += it.qty;
+      const p = products.get(it.name) ?? { name: it.name, units: 0, revenueCents: 0, marginCents: 0 };
+      p.units += it.qty;
+      p.revenueCents += it.lineNetCents;
+      p.marginCents += it.lineNetCents - it.unitCostCents * it.qty;
+      products.set(it.name, p);
+    }
+  }
+
+  return {
+    range,
+    totals,
+    days: [...days.values()].sort((a, b) => a.key.localeCompare(b.key)),
+    payments: [...payments.values()].sort((a, b) => b.revenueCents - a.revenueCents),
+    topProducts: [...products.values()].sort((a, b) => b.revenueCents - a.revenueCents).slice(0, 12),
+  };
+}
+
+/** One CSV row per bill line — the salon manager's sales export. */
+export async function salesCsv(scope: ReportScope, range: ReportRange): Promise<string> {
+  const db = getScopedDb(scope.orgId);
+  const sales = await db.sale.findMany({
+    where: {
+      ...(scope.branchId ? { branchId: scope.branchId } : {}),
+      ...(createdAtFilter(range) ? { createdAt: createdAtFilter(range) } : {}),
+    },
+    include: { branch: { select: { name: true } }, items: true },
+    orderBy: { createdAt: "desc" },
+  });
+
+  type Row = (typeof sales)[number]["items"][number] & { sale: (typeof sales)[number] };
+  const rows: Row[] = sales.flatMap((s) => s.items.map((it) => ({ ...it, sale: s })));
+
+  const columns: CsvColumn<Row>[] = [
+    { header: "Invoice", value: (r) => invoiceCode(r.sale.invoiceNo) },
+    { header: "Date", value: (r) => r.sale.createdAt.toISOString().slice(0, 10) },
+    { header: "Status", value: (r) => (r.sale.status === "VOID" ? "Void" : "Completed") },
+    { header: "Branch", value: (r) => r.sale.branch.name },
+    { header: "Customer", value: (r) => r.sale.customerName },
+    { header: "Phone", value: (r) => r.sale.customerPhone },
+    { header: "Payment", value: (r) => PAYMENT_MODE_LABEL[r.sale.paymentMode as PaymentModeValue] },
+    { header: "Product", value: (r) => r.name },
+    { header: "HSN", value: (r) => r.hsn },
+    { header: "Qty", value: (r) => r.qty },
+    { header: "Unit price", value: (r) => csvMoney(r.unitPriceCents) },
+    { header: "Taxable", value: (r) => csvMoney(r.lineNetCents) },
+    { header: "GST %", value: (r) => r.gstRate },
+    { header: "GST", value: (r) => csvMoney(r.taxCents) },
+    { header: "Line total", value: (r) => csvMoney(r.lineTotalCents) },
+    { header: "Unit cost", value: (r) => csvMoney(r.unitCostCents) },
+    { header: "Margin", value: (r) => csvMoney(r.lineNetCents - r.unitCostCents * r.qty) },
+  ];
+
+  return toCsv(columns, rows);
 }

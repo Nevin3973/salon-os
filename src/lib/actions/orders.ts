@@ -2,52 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import bcrypt from "bcryptjs";
 import { requireSession, withOrg } from "@/lib/tenant";
 import { logAudit } from "@/lib/audit";
 import { orderCode } from "@/lib/format";
 import { reservedByProduct, availableOf } from "@/lib/stock";
-import { takeToken, resetTokens } from "@/lib/rate-limit";
+import { verifyAuthCode } from "@/lib/authcode";
 import { notifyNewOrder, notifyOrderEdited } from "@/lib/notify";
-
-/**
- * Verifies a branch/org authorization code — the transaction-approval gate.
- * Used both when an order is placed and when a still-pending order is edited,
- * so an amended order carries the same approval as a new one.
- *
- * Returns the matched code's id, or an error message to show the user.
- * Rate-limited per user (10 tries / 10 min) so codes can't be brute-forced.
- */
-async function verifyAuthCode(
-  session: { userId: string; orgId: string },
-  branchId: string,
-  rawCode: string
-): Promise<{ ok: true; codeId: string } | { ok: false; error: string }> {
-  const limiter = takeToken(`authcode:${session.userId}`, { limit: 10, windowMs: 10 * 60 * 1000 });
-  if (!limiter.ok) {
-    return {
-      ok: false,
-      error: `Too many tries. Wait about ${Math.max(1, Math.ceil(limiter.retryAfterSec / 60))} minute(s) and try again.`,
-    };
-  }
-
-  const codes = await withOrg(session.orgId, (tx) =>
-    tx.authorizationCode.findMany({
-      where: {
-        orgId: session.orgId,
-        isActive: true,
-        OR: [{ locationId: null }, { locationId: branchId }],
-      },
-    })
-  );
-  for (const c of codes) {
-    if (await bcrypt.compare(rawCode.trim(), c.codeHash)) {
-      resetTokens(`authcode:${session.userId}`);
-      return { ok: true, codeId: c.id };
-    }
-  }
-  return { ok: false, error: "That authorization code is not valid." };
-}
 
 export type PlaceOrderResult =
   | { ok: true; orderId: string; orderNo: number; code: string }

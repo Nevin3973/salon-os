@@ -40,6 +40,8 @@ export async function toggleProductActive(input: { productId: string }): Promise
   return { ok: true };
 }
 
+const GST_RATES = [0, 5, 12, 18, 28] as const;
+
 const productSchema = z.object({
   sku: z.string().trim().min(2).max(32),
   name: z.string().trim().min(2).max(120),
@@ -49,6 +51,9 @@ const productSchema = z.object({
   stock: z.number().int().min(0).max(1_000_000),
   minStock: z.number().int().min(0).max(1_000_000),
   priceCents: z.number().int().min(0).max(100_000_000),
+  retailPriceCents: z.number().int().min(0).max(100_000_000).optional(),
+  gstRate: z.number().int().refine((n) => (GST_RATES as readonly number[]).includes(n), "Pick a valid GST rate.").optional(),
+  hsn: z.string().trim().max(12).optional(),
 });
 
 export async function createProduct(input: {
@@ -60,6 +65,9 @@ export async function createProduct(input: {
   stock: number;
   minStock: number;
   priceCents: number;
+  retailPriceCents?: number;
+  gstRate?: number;
+  hsn?: string;
 }): Promise<AdminResult> {
   const parsed = productSchema.safeParse(input);
   if (!parsed.success) {
@@ -145,6 +153,52 @@ export async function setProductImage(input: {
 
   revalidatePath("/admin/products");
   revalidatePath("/purchase-manager/catalogue");
+  return { ok: true };
+}
+
+const salePricingSchema = z.object({
+  productId: z.string().min(1),
+  retailPriceCents: z.number().int().min(0).max(100_000_000),
+  gstRate: z.number().int().refine((n) => (GST_RATES as readonly number[]).includes(n), "Pick a valid GST rate."),
+  hsn: z.string().trim().max(12).optional(),
+});
+
+/** Sets the retail selling price, GST rate and HSN code a branch bills to
+ *  customers. Head-office controlled, org-wide — same as the procurement price. */
+export async function setSalePricing(input: {
+  productId: string;
+  retailPriceCents: number;
+  gstRate: number;
+  hsn?: string;
+}): Promise<AdminResult> {
+  const parsed = salePricingSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Check the retail price." };
+  }
+  const { session, db } = await requireScopedSession("SUPER_ADMIN");
+
+  const product = await db.product.findFirst({ where: { id: parsed.data.productId } });
+  if (!product) return { ok: false, error: "Product not found." };
+
+  await db.product.update({
+    where: { id: product.id },
+    data: {
+      retailPriceCents: parsed.data.retailPriceCents,
+      gstRate: parsed.data.gstRate,
+      hsn: parsed.data.hsn || null,
+    },
+  });
+  await logAudit(prisma, {
+    orgId: session.orgId,
+    userId: session.userId,
+    userName: session.name,
+    action: `Set retail pricing for ${product.name} (GST ${parsed.data.gstRate}%)`,
+    entityType: "Product",
+    entityId: product.id,
+  });
+
+  revalidatePath("/admin/products");
+  revalidatePath("/salon/sell");
   return { ok: true };
 }
 

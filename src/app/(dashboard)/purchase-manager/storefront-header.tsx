@@ -101,6 +101,10 @@ export function StorefrontHeader({
                 <div className="text-xs text-faint">{orgName}{branchName ? ` · ${branchName}` : ""}</div>
               </div>
               <div className="h-px bg-line my-1" />
+              <Link href="/salon/sell" className="block px-3 py-2 text-sm font-semibold text-velvet hover:bg-velvet-soft rounded">
+                Salon counter — sell to customers
+              </Link>
+              <div className="h-px bg-line my-1" />
               <Link href="/purchase-manager/account" className="block px-3 py-2 text-sm hover:bg-velvet-soft rounded">Your account</Link>
               <Link href="/purchase-manager/account/addresses" className="block px-3 py-2 text-sm hover:bg-velvet-soft rounded">Addresses</Link>
               <Link href="/purchase-manager/orders" className="block px-3 py-2 text-sm hover:bg-velvet-soft rounded">Your orders</Link>
@@ -144,6 +148,13 @@ export function StorefrontHeader({
       {/* Row 2 — category strip */}
       <div style={{ background: "var(--color-header-accent)" }} className="text-white">
         <div className="max-w-[1500px] mx-auto px-2 sm:px-4 flex items-center gap-1 overflow-x-auto no-scrollbar h-10">
+          <Link
+            href="/salon/sell"
+            className="shrink-0 px-2.5 h-8 grid place-items-center text-[13px] rounded-sm border border-white/40 hover:border-white font-semibold transition-colors"
+          >
+            Sell to customer →
+          </Link>
+          <span className="shrink-0 w-px h-4 bg-white/30 mx-1" />
           {["All", ...categories].map((cat) => {
             const on = cat === activeCat;
             return (

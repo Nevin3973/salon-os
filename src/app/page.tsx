@@ -9,6 +9,8 @@ export default async function Home() {
   switch (session.activeRole) {
     case "PURCHASE_MANAGER":
       redirect("/purchase-manager/catalogue");
+    case "SALON_STAFF":
+      redirect("/salon/sell");
     case "WAREHOUSE_MANAGER":
       redirect("/warehouse/queue");
     case "SUPER_ADMIN":

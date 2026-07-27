@@ -1,13 +1,14 @@
 import { createHash } from "node:crypto";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
+import type { Role } from "@prisma/client";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/db";
 
 export type OrgContext = {
   orgId: string;
   /** null for API keys (machine callers act org-wide) */
-  role: "PURCHASE_MANAGER" | "WAREHOUSE_MANAGER" | "SUPER_ADMIN" | null;
+  role: Role | null;
   locationId: string | null;
   actor: string; // user name or API key name, for logs
 };

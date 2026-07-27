@@ -5,7 +5,8 @@ import { useSession } from "next-auth/react";
 import type { MembershipSummary } from "@/lib/types";
 
 const ROLE_LABEL: Record<string, string> = {
-  PURCHASE_MANAGER: "Purchase Manager",
+  PURCHASE_MANAGER: "Salon Manager",
+  SALON_STAFF: "Cashier",
   WAREHOUSE_MANAGER: "Warehouse Manager",
   SUPER_ADMIN: "Super Admin",
 };

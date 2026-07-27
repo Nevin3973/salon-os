@@ -2,7 +2,8 @@ import { requireScopedSession } from "@/lib/tenant";
 import { UsersPanel } from "./users-panel";
 
 const ROLE_LABEL: Record<string, string> = {
-  PURCHASE_MANAGER: "Purchase Manager",
+  PURCHASE_MANAGER: "Salon Manager",
+  SALON_STAFF: "Cashier",
   WAREHOUSE_MANAGER: "Warehouse Manager",
   SUPER_ADMIN: "Super Admin",
 };

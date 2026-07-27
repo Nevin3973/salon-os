@@ -5,8 +5,9 @@ import { prisma } from "@/lib/db";
 
 /**
  * Models that carry `orgId` directly and are scoped automatically by
- * `getScopedDb`. OrderItem / OrderItemDelivery do NOT have their own orgId —
- * they must only ever be reached through an already-orgId-checked Order
+ * `getScopedDb`. OrderItem / OrderItemDelivery / SaleItem do NOT have their
+ * own orgId — they must only ever be reached through an already-orgId-checked
+ * parent (Order / Sale)
  * (e.g. `scoped.order.update({ where: { id }, data: { items: { ... } } })`
  * or inside a transaction that has already verified the parent Order's
  * orgId). Never query them by a bare id supplied from the client.
@@ -21,6 +22,9 @@ const SCOPED_MODELS = [
   "authorizationCode",
   "auditLogEntry",
   "membership",
+  "branchStock",
+  "branchStockMovement",
+  "sale",
 ] as const;
 
 /**
@@ -115,12 +119,15 @@ type RequiredSession = {
  * since those are normal navigation states; throws for a role mismatch
  * since that indicates either a UI bug or a tampered request.
  */
-export async function requireSession(role?: Role): Promise<RequiredSession> {
+export async function requireSession(role?: Role | Role[]): Promise<RequiredSession> {
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (!session.activeOrgId || !session.activeRole) redirect("/select-org");
-  if (role && session.activeRole !== role) {
-    throw new Error(`Expected role ${role}, session has ${session.activeRole}`);
+  if (role) {
+    const allowed = Array.isArray(role) ? role : [role];
+    if (!allowed.includes(session.activeRole)) {
+      throw new Error(`Expected role ${allowed.join("|")}, session has ${session.activeRole}`);
+    }
   }
   return {
     userId: session.user.id,
@@ -133,7 +140,7 @@ export async function requireSession(role?: Role): Promise<RequiredSession> {
 }
 
 /** Convenience: session + a db client pre-scoped to the session's org. */
-export async function requireScopedSession(role?: Role) {
+export async function requireScopedSession(role?: Role | Role[]) {
   const session = await requireSession(role);
   return { session, db: getScopedDb(session.orgId) };
 }

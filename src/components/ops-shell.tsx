@@ -61,6 +61,25 @@ const ICONS = {
       <path d="M4 9h10a6 6 0 0 1 0 12h-3" />
     </>
   ),
+  cart: (
+    <>
+      <circle cx="9" cy="20" r="1.4" />
+      <circle cx="18" cy="20" r="1.4" />
+      <path d="M2 3h3l2.4 12.2a1.5 1.5 0 0 0 1.5 1.2h8.2a1.5 1.5 0 0 0 1.5-1.2L21.5 7H6" />
+    </>
+  ),
+  store: (
+    <>
+      <path d="M4 9h16v10a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z" />
+      <path d="M3 9l1.5-5h15L21 9M9 20v-5h6v5" />
+    </>
+  ),
+  receipt: (
+    <>
+      <path d="M6 3h12v18l-2-1.5-2 1.5-2-1.5-2 1.5-2-1.5L6 21z" />
+      <path d="M9 8h6M9 12h6" />
+    </>
+  ),
 } as const;
 
 export function OpsShell({

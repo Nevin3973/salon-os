@@ -163,7 +163,8 @@ function AddUserForm({
             }}
             className={inputCls}
           >
-            <option value="PURCHASE_MANAGER">Purchase Manager</option>
+            <option value="PURCHASE_MANAGER">Salon Manager</option>
+            <option value="SALON_STAFF">Cashier (salon staff)</option>
             <option value="WAREHOUSE_MANAGER">Warehouse Manager</option>
             <option value="SUPER_ADMIN">Super Admin</option>
           </select>
