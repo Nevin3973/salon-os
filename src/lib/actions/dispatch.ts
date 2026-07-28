@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { requireSession, setOrgConfig } from "@/lib/tenant";
+import { requireVerifiedSession, setOrgConfig } from "@/lib/tenant";
 import { logAudit } from "@/lib/audit";
 import { orderCode, fmtDate } from "@/lib/format";
 import { allocateDispatch } from "@/lib/allocation";
@@ -15,7 +15,7 @@ export type DispatchResult = { ok: true } | { ok: false; error: string; itemId?:
 
 export async function startProcessing(input: { orderId: string }): Promise<DispatchResult> {
   const { orderId } = z.object({ orderId: z.string().min(1) }).parse(input);
-  const session = await requireSession("WAREHOUSE_MANAGER");
+  const session = await requireVerifiedSession("WAREHOUSE_MANAGER");
 
   try {
     await prisma.$transaction(async (tx) => {
@@ -72,7 +72,7 @@ export async function applyDispatch(input: {
   lines: { orderItemId: string; dispatch: number; reason?: string; eta?: string; remark?: string }[];
 }): Promise<DispatchResult> {
   const { orderId, closing, lines } = applySchema.parse(input);
-  const session = await requireSession("WAREHOUSE_MANAGER");
+  const session = await requireVerifiedSession("WAREHOUSE_MANAGER");
   const lineMap = new Map(lines.map((l) => [l.orderItemId, l]));
 
   try {
@@ -253,7 +253,7 @@ export async function rejectOrder(input: {
   note?: string;
 }): Promise<DispatchResult> {
   const { orderId, reason, note } = rejectSchema.parse(input);
-  const session = await requireSession("WAREHOUSE_MANAGER");
+  const session = await requireVerifiedSession("WAREHOUSE_MANAGER");
 
   try {
     await prisma.$transaction(async (tx) => {
@@ -326,7 +326,7 @@ export async function returnOrder(input: {
   lines: { orderItemId: string; qty: number }[];
 }): Promise<DispatchResult> {
   const { orderId, reason, note, lines } = returnSchema.parse(input);
-  const session = await requireSession("WAREHOUSE_MANAGER");
+  const session = await requireVerifiedSession("WAREHOUSE_MANAGER");
   const askedFor = new Map(lines.map((l) => [l.orderItemId, l.qty]));
 
   let returnedUnits = 0;

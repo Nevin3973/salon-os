@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { requireSession, withOrg } from "@/lib/tenant";
+import { requireSession, requireVerifiedSession, withOrg } from "@/lib/tenant";
 import { logAudit } from "@/lib/audit";
 import { orderCode } from "@/lib/format";
 import { reservedByProduct, availableOf } from "@/lib/stock";
@@ -50,7 +50,7 @@ export async function placeOrder(input: {
     };
   }
 
-  const session = await requireSession("PURCHASE_MANAGER");
+  const session = await requireVerifiedSession("PURCHASE_MANAGER");
   if (!session.locationId) return { ok: false, error: "Your account is not assigned to a branch." };
   const branchId = session.locationId;
 
@@ -196,7 +196,7 @@ export async function updateOrder(input: {
   if (!parsed.success) return { ok: false, error: "Check the quantities and try again." };
   const { orderId, lines, mergeCart, shipToAddressId, deliveryNote } = parsed.data;
 
-  const session = await requireSession("PURCHASE_MANAGER");
+  const session = await requireVerifiedSession("PURCHASE_MANAGER");
   if (!session.locationId) return { ok: false, error: "Your account is not assigned to a branch." };
   const branchId = session.locationId;
 
@@ -328,7 +328,7 @@ export async function updateOrder(input: {
 
 export async function cancelOrder(input: { orderId: string }) {
   const { orderId } = z.object({ orderId: z.string().min(1) }).parse(input);
-  const session = await requireSession("PURCHASE_MANAGER");
+  const session = await requireVerifiedSession("PURCHASE_MANAGER");
 
   await withOrg(session.orgId, async (tx) => {
     const order = await tx.order.findFirst({
@@ -355,7 +355,7 @@ export async function cancelOrder(input: { orderId: string }) {
 /** Copies an order's lines back into the cart. */
 export async function reorder(input: { orderId: string }) {
   const { orderId } = z.object({ orderId: z.string().min(1) }).parse(input);
-  const session = await requireSession("PURCHASE_MANAGER");
+  const session = await requireVerifiedSession("PURCHASE_MANAGER");
 
   await withOrg(session.orgId, async (tx) => {
     const order = await tx.order.findFirst({

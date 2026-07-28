@@ -118,6 +118,10 @@ type RequiredSession = {
  * matches. Redirects rather than throws for the missing-session/org cases
  * since those are normal navigation states; throws for a role mismatch
  * since that indicates either a UI bug or a tampered request.
+ *
+ * This trusts the JWT claim (cheap, no DB) — fine for reads. Mutations that
+ * move money or stock use `requireVerifiedSession` instead, which additionally
+ * re-checks the live membership.
  */
 export async function requireSession(role?: Role | Role[]): Promise<RequiredSession> {
   const session = await auth();
@@ -137,6 +141,53 @@ export async function requireSession(role?: Role | Role[]): Promise<RequiredSess
     role: session.activeRole,
     locationId: session.activeLocationId,
   };
+}
+
+/**
+ * Thrown when a request's JWT claim no longer matches a live membership — the
+ * person was removed from the org, or their role/branch was changed, after the
+ * token was minted. Server actions surface it as a "session changed" message.
+ */
+export class StaleSessionError extends Error {
+  constructor(reason: string) {
+    super(reason);
+    this.name = "StaleSessionError";
+  }
+}
+
+/** True for the error above — lets action `catch` blocks show a specific message. */
+export function isStaleSession(e: unknown): e is StaleSessionError {
+  return e instanceof StaleSessionError;
+}
+
+/**
+ * Stricter guard for actions that move money or stock, or change privileged
+ * settings. On top of the JWT checks, it confirms the claimed org/role/branch
+ * still matches a live Membership row (one indexed lookup on the RLS-exempt
+ * Membership table) — so a revoked or re-roled account cannot act on a token
+ * that was valid when they signed in. Throws `StaleSessionError` on a mismatch
+ * rather than redirecting, because an action is a point operation, not a
+ * navigation; the caller returns a friendly result and the next page load
+ * naturally routes the user back to sign in.
+ */
+export async function requireVerifiedSession(role?: Role | Role[]): Promise<RequiredSession> {
+  const s = await requireSession(role);
+  const membership = await prisma.membership.findFirst({
+    where: { userId: s.userId, orgId: s.orgId },
+    select: { role: true, locationId: true },
+  });
+  if (!membership) throw new StaleSessionError("Your access to this workspace has changed.");
+  if (membership.role !== s.role) throw new StaleSessionError("Your role has changed.");
+  if ((membership.locationId ?? null) !== (s.locationId ?? null)) {
+    throw new StaleSessionError("Your assigned location has changed.");
+  }
+  return s;
+}
+
+/** Convenience: verified session + a db client pre-scoped to the session's org. */
+export async function requireVerifiedScopedSession(role?: Role | Role[]) {
+  const session = await requireVerifiedSession(role);
+  return { session, db: getScopedDb(session.orgId) };
 }
 
 /** Convenience: session + a db client pre-scoped to the session's org. */

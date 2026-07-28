@@ -6,7 +6,7 @@ import bcrypt from "bcryptjs";
 import { randomBytes, randomInt } from "node:crypto";
 import { Role } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { requireScopedSession, withOrg } from "@/lib/tenant";
+import { requireVerifiedScopedSession, withOrg } from "@/lib/tenant";
 import { logAudit } from "@/lib/audit";
 import { productImageUrl } from "@/lib/product-image";
 import { sendInviteEmail } from "@/lib/actions/password";
@@ -20,7 +20,7 @@ export type AdminResult<T = undefined> =
 
 export async function toggleProductActive(input: { productId: string }): Promise<AdminResult> {
   const { productId } = z.object({ productId: z.string().min(1) }).parse(input);
-  const { session, db } = await requireScopedSession("SUPER_ADMIN");
+  const { session, db } = await requireVerifiedScopedSession("SUPER_ADMIN");
 
   const product = await db.product.findFirst({ where: { id: productId } });
   if (!product) return { ok: false, error: "Product not found." };
@@ -73,7 +73,7 @@ export async function createProduct(input: {
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Check the product fields." };
   }
-  const { session, db } = await requireScopedSession("SUPER_ADMIN");
+  const { session, db } = await requireVerifiedScopedSession("SUPER_ADMIN");
 
   const existing = await db.product.findFirst({ where: { sku: parsed.data.sku } });
   if (existing) return { ok: false, error: `SKU ${parsed.data.sku} already exists.` };
@@ -133,7 +133,7 @@ export async function setProductImage(input: {
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid image." };
   }
-  const { session, db } = await requireScopedSession("SUPER_ADMIN");
+  const { session, db } = await requireVerifiedScopedSession("SUPER_ADMIN");
 
   const product = await db.product.findFirst({ where: { id: parsed.data.productId } });
   if (!product) return { ok: false, error: "Product not found." };
@@ -175,7 +175,7 @@ export async function setSalePricing(input: {
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Check the retail price." };
   }
-  const { session, db } = await requireScopedSession("SUPER_ADMIN");
+  const { session, db } = await requireVerifiedScopedSession("SUPER_ADMIN");
 
   const product = await db.product.findFirst({ where: { id: parsed.data.productId } });
   if (!product) return { ok: false, error: "Product not found." };
@@ -221,7 +221,7 @@ export async function createUserWithMembership(input: {
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Check the user details." };
   }
-  const { session, db } = await requireScopedSession("SUPER_ADMIN");
+  const { session, db } = await requireVerifiedScopedSession("SUPER_ADMIN");
 
   if (parsed.data.role !== "SUPER_ADMIN" && !parsed.data.locationId) {
     return { ok: false, error: "Pick a location for this role." };
@@ -293,7 +293,7 @@ export async function createUserWithMembership(input: {
 export async function generateAuthCode(input: { locationId?: string }): Promise<AdminResult<{ code: string }>> {
   const parsed = z.object({ locationId: z.string().min(1).optional() }).safeParse(input);
   if (!parsed.success) return { ok: false, error: "Invalid location." };
-  const { session, db } = await requireScopedSession("SUPER_ADMIN");
+  const { session, db } = await requireVerifiedScopedSession("SUPER_ADMIN");
 
   let prefix = "CODE";
   if (parsed.data.locationId) {
@@ -326,7 +326,7 @@ export async function generateAuthCode(input: { locationId?: string }): Promise<
 
 export async function revokeAuthCode(input: { codeId: string }): Promise<AdminResult> {
   const { codeId } = z.object({ codeId: z.string().min(1) }).parse(input);
-  const { session, db } = await requireScopedSession("SUPER_ADMIN");
+  const { session, db } = await requireVerifiedScopedSession("SUPER_ADMIN");
 
   const code = await db.authorizationCode.findFirst({ where: { id: codeId, isActive: true } });
   if (!code) return { ok: false, error: "Code not found." };

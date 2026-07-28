@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { requireSession, setOrgConfig, withOrg } from "@/lib/tenant";
+import { requireVerifiedSession, setOrgConfig, withOrg } from "@/lib/tenant";
 import { logAudit } from "@/lib/audit";
 import { orderCode } from "@/lib/format";
 
@@ -14,7 +14,7 @@ export async function adjustStock(input: { productId: string; delta: number }): 
   const { productId, delta } = z
     .object({ productId: z.string().min(1), delta: z.number().int() })
     .parse(input);
-  const session = await requireSession("WAREHOUSE_MANAGER");
+  const session = await requireVerifiedSession("WAREHOUSE_MANAGER");
 
   try {
     await prisma.$transaction(async (tx) => {
@@ -56,7 +56,7 @@ export async function setMinStock(input: { productId: string; minStock: number }
   const { productId, minStock } = z
     .object({ productId: z.string().min(1), minStock: z.number().int().min(0).max(1_000_000) })
     .parse(input);
-  const session = await requireSession("WAREHOUSE_MANAGER");
+  const session = await requireVerifiedSession("WAREHOUSE_MANAGER");
   const found = await withOrg(session.orgId, async (tx) => {
     const p = await tx.product.findFirst({ where: { id: productId, orgId: session.orgId } });
     if (!p) return false;
@@ -75,7 +75,7 @@ export async function setMinStock(input: { productId: string; minStock: number }
  */
 export async function fulfilOutstanding(input: { orderItemId: string }): Promise<ActionResult> {
   const { orderItemId } = z.object({ orderItemId: z.string().min(1) }).parse(input);
-  const session = await requireSession("WAREHOUSE_MANAGER");
+  const session = await requireVerifiedSession("WAREHOUSE_MANAGER");
 
   try {
     await prisma.$transaction(async (tx) => {
@@ -182,7 +182,7 @@ export async function previewImport(input: {
   mode: ImportMode;
 }): Promise<ImportPreview> {
   const { rows, mode } = previewSchema.parse(input);
-  const session = await requireSession("WAREHOUSE_MANAGER");
+  const session = await requireVerifiedSession("WAREHOUSE_MANAGER");
   const products = await withOrg(session.orgId, (tx) =>
     tx.product.findMany({ where: { orgId: session.orgId } })
   );
@@ -229,7 +229,7 @@ export async function confirmImport(input: {
   mode: ImportMode;
 }): Promise<{ ok: true; summary: ImportSummary } | { ok: false; error: string }> {
   const { rows, mode } = previewSchema.parse(input);
-  const session = await requireSession("WAREHOUSE_MANAGER");
+  const session = await requireVerifiedSession("WAREHOUSE_MANAGER");
 
   try {
     const summary = await prisma.$transaction(async (tx) => {

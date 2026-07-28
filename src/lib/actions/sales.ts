@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { requireSession, setOrgConfig } from "@/lib/tenant";
+import { requireVerifiedSession, setOrgConfig } from "@/lib/tenant";
 import { logAudit } from "@/lib/audit";
 import { verifyAuthCode } from "@/lib/authcode";
 import { bumpBranchStock } from "@/lib/branch-stock";
@@ -46,7 +46,7 @@ export async function recordSale(input: {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Check the bill." };
   }
   // Selling is the counter's daily job — open to salon staff and managers.
-  const session = await requireSession(["PURCHASE_MANAGER", "SALON_STAFF"]);
+  const session = await requireVerifiedSession(["PURCHASE_MANAGER", "SALON_STAFF"]);
   const branchId = session.locationId;
   if (!branchId) return { ok: false, error: "Your account is not assigned to a branch." };
 
@@ -193,7 +193,7 @@ export async function voidSale(input: {
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.path[0] === "authCode" ? "Enter the authorization code." : "Pick a reason for voiding this bill." };
   }
-  const session = await requireSession("PURCHASE_MANAGER");
+  const session = await requireVerifiedSession("PURCHASE_MANAGER");
   const branchId = session.locationId;
   if (!branchId) return { ok: false, error: "Your account is not assigned to a branch." };
 
@@ -276,7 +276,7 @@ export async function adjustBranchStock(input: {
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.path[0] === "authCode" ? "Enter the authorization code." : "Check the count and reason." };
   }
-  const session = await requireSession("PURCHASE_MANAGER");
+  const session = await requireVerifiedSession("PURCHASE_MANAGER");
   const branchId = session.locationId;
   if (!branchId) return { ok: false, error: "Your account is not assigned to a branch." };
 
