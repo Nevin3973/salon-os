@@ -596,6 +596,37 @@ async function reset() {
   await prisma.org.deleteMany();
 }
 
+// Every tenant-scoped table that carries a row-level-security policy. Kept in
+// sync with the RLS migrations; the seed pauses enforcement across these while
+// it wipes and repopulates.
+const TENANT_TABLES = [
+  "Location", "Product", "StockMovement", "Order", "CartItem", "AuthorizationCode",
+  "AuditLogEntry", "Address", "OrderItem", "OrderItemDelivery",
+  "BranchStock", "BranchStockMovement", "Sale", "SaleItem",
+] as const;
+
+/**
+ * Turns RLS enforcement off or back on for every tenant table.
+ *
+ * The seed connects as the database OWNER. On Neon the owner is still subject
+ * to FORCE RLS, so with policies active it can neither clear nor refill these
+ * tables — which is exactly what broke a production reseed once. Pausing RLS
+ * for the duration (and always restoring ENABLE + FORCE afterwards) makes a
+ * reseed a single, safe command instead of a manual three-step dance. The
+ * policies themselves are never dropped, so restoring is just a re-enable.
+ * On local Docker the superuser ignores RLS, so this is a harmless no-op there.
+ */
+async function setTenantRls(on: boolean) {
+  for (const t of TENANT_TABLES) {
+    if (on) {
+      await prisma.$executeRawUnsafe(`ALTER TABLE "${t}" ENABLE ROW LEVEL SECURITY;`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE "${t}" FORCE ROW LEVEL SECURITY;`);
+    } else {
+      await prisma.$executeRawUnsafe(`ALTER TABLE "${t}" DISABLE ROW LEVEL SECURITY;`);
+    }
+  }
+}
+
 async function main() {
   // This seed wipes data and creates weak demo accounts — dev machines only,
   // unless deliberately overridden (e.g. seeding a hosted DEMO environment).
@@ -608,37 +639,45 @@ async function main() {
   }
 
   console.log(`Seeding — all demo users share the password: ${DEMO_PASSWORD}\n`);
-  await reset();
 
-  console.log("Org: Beyond Demands");
-  const beyond = await seedOrg({
-    name: "Beyond Demands",
-    slug: "beyond",
-    products: beyondProducts(),
-    branchNames: ["Rosewood Avenue", "Marina Walk", "Palm District"],
-    warehouseName: "Central Warehouse",
-    pmNames: ["Leila M.", "Sara N.", "Huda K."],
-    wmName: "Omar D.",
-    adminName: "A. Rahman",
-    cashierName: "Zara P.",
-  });
-  await seedSampleOrders(beyond);
-  await seedBranchStockAndSales(beyond);
+  // Pause RLS across the wipe+seed and ALWAYS restore it, even on failure.
+  await setTenantRls(false);
+  try {
+    await reset();
 
-  console.log("\nOrg: Bellissima Salon Group");
-  const bellissima = await seedOrg({
-    name: "Bellissima Salon Group",
-    slug: "bellissima",
-    products: bellissimaProducts(),
-    branchNames: ["Downtown Studio"],
-    warehouseName: "Bellissima Depot",
-    pmNames: ["Priya S."],
-    wmName: "Marco T.",
-    adminName: "Elena V.",
-  });
-  await seedBranchStockAndSales(bellissima);
+    console.log("Org: Beyond Demands");
+    const beyond = await seedOrg({
+      name: "Beyond Demands",
+      slug: "beyond",
+      products: beyondProducts(),
+      branchNames: ["Rosewood Avenue", "Marina Walk", "Palm District"],
+      warehouseName: "Central Warehouse",
+      pmNames: ["Leila M.", "Sara N.", "Huda K."],
+      wmName: "Omar D.",
+      adminName: "A. Rahman",
+      cashierName: "Zara P.",
+    });
+    await seedSampleOrders(beyond);
+    await seedBranchStockAndSales(beyond);
 
-  console.log("\nDone.");
+    console.log("\nOrg: Bellissima Salon Group");
+    const bellissima = await seedOrg({
+      name: "Bellissima Salon Group",
+      slug: "bellissima",
+      products: bellissimaProducts(),
+      branchNames: ["Downtown Studio"],
+      warehouseName: "Bellissima Depot",
+      pmNames: ["Priya S."],
+      wmName: "Marco T.",
+      adminName: "Elena V.",
+    });
+    await seedBranchStockAndSales(bellissima);
+  } finally {
+    await setTenantRls(true);
+    console.log("\nRLS re-enabled on all tenant tables.");
+  }
+
+  console.log("Done.");
 }
 
 main()

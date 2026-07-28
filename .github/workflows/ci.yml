@@ -1,45 +1,70 @@
 name: CI
+
+# Gate every change to main/staging. Production deploys are handled by Vercel's
+# git integration (main -> Production, other branches -> Preview), so CI's job
+# is to VERIFY, not to deploy: lint, type-check, build, and — most importantly —
+# prove the Postgres row-level-security tenant wall still holds, against a real
+# database with the non-privileged app role (the same shape as production).
+
 on:
   push:
-    branches: [main]
+    branches: [main, staging]
   pull_request:
-    branches: [main]
+    branches: [main, staging]
 
 jobs:
-  build-test-deploy:
+  verify:
     runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        # `salonos` is the cluster superuser (bypasses RLS) — used for
+        # migrations and seeding, mirroring Neon's owner role. The app and the
+        # RLS tests connect as the restricted `salonos_app` role created below.
+        env:
+          POSTGRES_USER: salonos
+          POSTGRES_PASSWORD: salonos_dev_pw
+          POSTGRES_DB: salonos
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U salonos"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+
+    env:
+      # Owner (migrations/seed) vs restricted app role (runtime + tests).
+      DIRECT_URL: postgresql://salonos:salonos_dev_pw@localhost:5432/salonos?schema=public
+      DATABASE_URL: postgresql://salonos_app:salonos_app_dev_pw@localhost:5432/salonos?schema=public
+      # Build-time only; not a real secret.
+      AUTH_SECRET: ci-not-a-real-secret-ci-not-a-real-secret
+
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Node
-        uses: actions/setup-node@v4
+
+      - uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: 'npm'
+
       - name: Install dependencies
         run: npm ci
+
+      - name: Prepare database (schema + RLS + app role + seed)
+        run: |
+          npx prisma db push --skip-generate
+          npx prisma db execute --schema prisma/schema.prisma --file prisma/migrations/20260719000001_rls/migration.sql
+          npx prisma db execute --schema prisma/schema.prisma --file prisma/migrations/20260727000001_sales_rls/migration.sql
+          npx prisma db execute --schema prisma/schema.prisma --file scripts/provision-app-role.sql
+          npx tsx prisma/seed.ts
+
       - name: Lint
         run: npm run lint
+
       - name: Type check
         run: npx tsc --noEmit
-      - name: Unit tests
+
+      - name: Tests (unit + row-level-security integration)
         run: npm test -- --run
-      - name: Build Next.js
+
+      - name: Build
         run: npm run build
-      - name: Build Docker image
-        run: docker build -t ${{ secrets.DOCKER_USERNAME }}/salon-os:${{ github.sha }} .
-      - name: Push Docker image to Docker Hub
-        env:
-          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
-          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
-        run: |
-          echo $DOCKER_PASSWORD | docker login -u $DOCKER_USERNAME --password-stdin
-          docker push $DOCKER_USERNAME/salon-os:${{ github.sha }}
-      - name: Deploy to Azure Container Apps
-        uses: azure/azure-cli@v2
-        with:
-          inlineScript: |
-            az login --service-principal -u ${{ secrets.AZURE_CLIENT_ID }} -p ${{ secrets.AZURE_CLIENT_SECRET }} --tenant ${{ secrets.AZURE_TENANT_ID }}
-            az account set -s ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-            az containerapp update \
-              --name salon-os \
-              --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
-              --image ${{ secrets.DOCKER_USERNAME }}/salon-os:${{ github.sha }}
