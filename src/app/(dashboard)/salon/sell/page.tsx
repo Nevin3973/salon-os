@@ -17,6 +17,7 @@ export default async function SellPage() {
     .filter((s) => s.product.active && s.product.retailPriceCents > 0)
     .map((s) => ({
       productId: s.productId,
+      sku: s.product.sku,
       name: s.product.name,
       brand: s.product.brand,
       unit: s.product.unit,
@@ -25,6 +26,7 @@ export default async function SellPage() {
       gstRate: s.product.gstRate,
       hsn: s.product.hsn,
       onHand: s.onHand,
+      rackId: s.rackId,
     }))
     .sort((a, b) => a.name.localeCompare(b.name));
 

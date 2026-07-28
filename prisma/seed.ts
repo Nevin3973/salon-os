@@ -48,6 +48,13 @@ function hash(s: string): number {
   return (h >>> 0) / 0xffffffff;
 }
 
+/** A stable rack/bin label like "C-07": aisle by category, slot by branch+product. */
+function rackFor(category: string, branchId: string, productId: string): string {
+  const aisle = String.fromCharCode(65 + Math.floor(hash(`aisle:${category}`) * 8)); // A–H
+  const slot = 1 + Math.floor(hash(`${branchId}:${productId}`) * 40); // 1–40
+  return `${aisle}-${String(slot).padStart(2, "0")}`;
+}
+
 // The seed writes without an org context, so it must use the owner
 // connection (DIRECT_URL) — the app role would be blocked by RLS.
 const prisma = new PrismaClient({
@@ -496,7 +503,13 @@ async function seedBranchStockAndSales(ctx: SeededOrg) {
       const base = 6 + Math.floor(hash(`${branch.id}:${p.id}`) * 20); // 6..25
       shelf.set(p.id, base);
       await prisma.branchStock.create({
-        data: { orgId: ctx.org.id, branchId: branch.id, productId: p.id, onHand: base },
+        data: {
+          orgId: ctx.org.id,
+          branchId: branch.id,
+          productId: p.id,
+          onHand: base,
+          rackId: rackFor(p.category, branch.id, p.id),
+        },
       });
       await prisma.branchStockMovement.create({
         data: {

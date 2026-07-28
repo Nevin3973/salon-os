@@ -239,6 +239,10 @@ model BranchStock {
   productId String
   product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
   onHand    Int      @default(0)
+  /// Physical shelf/rack/bin label at this branch, e.g. "A-12" — helps staff
+  /// find the product fast while billing. Per-branch (same product, different
+  /// rack at another branch).
+  rackId    String?
   updatedAt DateTime @updatedAt
 
   @@unique([branchId, productId])

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { formatMoney } from "@/lib/money";
 import { lineGst, billTotals } from "@/lib/gst";
@@ -9,6 +9,7 @@ import { recordSale } from "@/lib/actions/sales";
 
 export type Sellable = {
   productId: string;
+  sku: string;
   name: string;
   brand: string;
   unit: string;
@@ -17,6 +18,7 @@ export type Sellable = {
   gstRate: number;
   hsn: string | null;
   onHand: number;
+  rackId: string | null;
 };
 
 /** Per-unit price the customer pays, GST included — shown on the tile. */
@@ -35,6 +37,7 @@ export function PosTerminal({ items }: { items: Sellable[] }) {
   const [cart, setCart] = useState<Map<string, number>>(new Map());
   const [search, setSearch] = useState("");
   const [cat, setCat] = useState("All");
+  const searchRef = useRef<HTMLInputElement>(null);
   const [showCustomer, setShowCustomer] = useState(false);
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
@@ -49,9 +52,27 @@ export function PosTerminal({ items }: { items: Sellable[] }) {
     return (
       i.name.toLowerCase().includes(q) ||
       i.brand.toLowerCase().includes(q) ||
+      i.sku.toLowerCase().includes(q) ||
+      (i.rackId?.toLowerCase().includes(q) ?? false) ||
       i.category.toLowerCase().includes(q)
     );
   });
+
+  // Enter adds instantly: an exact SKU match (barcode scanner types SKU + Enter)
+  // wins, otherwise the single remaining result. Then clear + refocus to scan on.
+  function onSearchKey(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    if (!q) return;
+    const exact = items.find((i) => i.sku.toLowerCase() === q);
+    const target = exact ?? (shown.length === 1 ? shown[0] : null);
+    if (target && (cart.get(target.productId) ?? 0) < target.onHand) {
+      add(target.productId);
+      setSearch("");
+      setCat("All");
+      searchRef.current?.focus();
+    }
+  }
 
   function setQty(productId: string, qty: number) {
     setError("");
@@ -101,9 +122,12 @@ export function PosTerminal({ items }: { items: Sellable[] }) {
           </div>
 
           <input
+            ref={searchRef}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search your shelf…"
+            onKeyDown={onSearchKey}
+            autoFocus
+            placeholder="Search or scan — name, SKU, rack…"
             className="mt-3 w-full bg-surface border border-line rounded-xl px-4 h-12 text-base text-ink focus:border-velvet outline-none transition-colors"
           />
 
@@ -145,11 +169,21 @@ export function PosTerminal({ items }: { items: Sellable[] }) {
                   )}
                   <div>
                     <div className="font-semibold text-sm leading-tight line-clamp-2">{p.name}</div>
-                    <div className="text-xs text-faint mt-0.5 truncate">{p.brand}</div>
+                    <div className="text-xs text-faint mt-0.5 truncate">
+                      {p.rackId ? (
+                        <span className="text-velvet font-semibold">📍 {p.rackId}</span>
+                      ) : (
+                        p.brand
+                      )}
+                    </div>
                   </div>
                   <div className="flex items-baseline justify-between mt-2">
                     <span className="font-bold text-base tabular-nums">{formatMoney(inclusive(p))}</span>
-                    <span className="text-[11px] text-faint tabular-nums">{p.onHand} left</span>
+                    <span
+                      className={`text-[11px] tabular-nums ${p.onHand <= 3 ? "text-out font-semibold" : "text-faint"}`}
+                    >
+                      {p.onHand} left
+                    </span>
                   </div>
                 </button>
               );
@@ -294,7 +328,10 @@ function BillLine({ line, setQty }: { line: Line; setQty: (id: string, qty: numb
     <div className="flex items-center gap-2 bg-bg rounded-xl p-2">
       <div className="min-w-0 flex-1 pl-1">
         <div className="text-sm font-medium truncate">{line.p.name}</div>
-        <div className="text-[11px] text-faint tabular-nums">{formatMoney(line.totalCents)}</div>
+        <div className="text-[11px] text-faint tabular-nums">
+          {line.p.rackId && <span className="text-velvet font-semibold">📍 {line.p.rackId} · </span>}
+          {formatMoney(line.totalCents)}
+        </div>
       </div>
       <Stepper value={line.qty} max={line.p.onHand} onChange={(n) => setQty(line.p.productId, n)} />
     </div>

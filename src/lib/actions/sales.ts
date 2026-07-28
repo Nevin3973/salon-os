@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { requireVerifiedSession, setOrgConfig } from "@/lib/tenant";
+import { requireVerifiedSession, setOrgConfig, withOrg } from "@/lib/tenant";
 import { logAudit } from "@/lib/audit";
 import { verifyAuthCode } from "@/lib/authcode";
 import { bumpBranchStock } from "@/lib/branch-stock";
@@ -292,27 +292,23 @@ export async function adjustBranchStock(input: {
       });
       if (!product) throw new Error("PRODUCT_MISSING");
 
-      const existing = await tx.branchStock.findFirst({
-        where: { branchId, productId: product.id },
-      });
-      const prev = existing?.onHand ?? 0;
-      const delta = parsed.data.newOnHand - prev;
-      if (delta === 0) return;
-
-      await bumpBranchStock(tx, {
+      // Absolute set, resolved under the row lock (see bumpBranchStock) so a
+      // concurrent sale can't turn "set to N" into a wrong relative change.
+      const { prev, next } = await bumpBranchStock(tx, {
         orgId: session.orgId,
         branchId,
         productId: product.id,
-        delta,
+        setTo: parsed.data.newOnHand,
         reason: `Adjustment · ${parsed.data.reason}`,
         userId: session.userId,
       });
+      if (prev === next) return; // nothing actually changed
 
       await logAudit(tx, {
         orgId: session.orgId,
         userId: session.userId,
         userName: session.name,
-        action: `Adjusted shelf count for ${product.name}: ${prev} → ${parsed.data.newOnHand} (${parsed.data.reason})`,
+        action: `Adjusted shelf count for ${product.name}: ${prev} → ${next} (${parsed.data.reason})`,
         entityType: "Product",
         entityId: product.id,
       });
@@ -322,6 +318,50 @@ export async function adjustBranchStock(input: {
   }
 
   revalidatePath("/salon/inventory");
+  return { ok: true, saleId: "" };
+}
+
+// ————————————————————————————————————————————————————————
+// Rack / bin location
+// ————————————————————————————————————————————————————————
+
+const rackSchema = z.object({
+  productId: z.string().min(1),
+  rackId: z.string().trim().max(24), // empty string clears it
+});
+
+/**
+ * Sets (or clears) a product's physical rack/bin label at this branch — just a
+ * locator to help staff grab it fast while billing. No stock or money moves, so
+ * it's manager-only but needs no authorization code.
+ */
+export async function setBranchRack(input: { productId: string; rackId: string }): Promise<SaleResult> {
+  const parsed = rackSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Rack label is too long (max 24 characters)." };
+  const session = await requireVerifiedSession("PURCHASE_MANAGER");
+  const branchId = session.locationId;
+  if (!branchId) return { ok: false, error: "Your account is not assigned to a branch." };
+  const rack = parsed.data.rackId.trim() || null;
+
+  try {
+    await withOrg(session.orgId, async (tx) => {
+      const product = await tx.product.findFirst({
+        where: { id: parsed.data.productId, orgId: session.orgId },
+        select: { id: true },
+      });
+      if (!product) throw new Error("PRODUCT_MISSING");
+      await tx.branchStock.upsert({
+        where: { branchId_productId: { branchId, productId: product.id } },
+        update: { rackId: rack },
+        create: { orgId: session.orgId, branchId, productId: product.id, onHand: 0, rackId: rack },
+      });
+    });
+  } catch (e) {
+    return saleError(e);
+  }
+
+  revalidatePath("/salon/inventory");
+  revalidatePath("/salon/sell");
   return { ok: true, saleId: "" };
 }
 

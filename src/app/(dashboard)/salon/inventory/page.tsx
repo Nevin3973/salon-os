@@ -1,6 +1,7 @@
 import { requireScopedSession } from "@/lib/tenant";
 import { formatMoney } from "@/lib/money";
 import { AdjustCell } from "./adjust-cell";
+import { RackCell } from "./rack-cell";
 
 export default async function SalonInventoryPage() {
   const { session, db } = await requireScopedSession("PURCHASE_MANAGER");
@@ -11,6 +12,7 @@ export default async function SalonInventoryPage() {
     branchId ? db.branchStock.findMany({ where: { branchId } }) : Promise.resolve([]),
   ]);
   const onHandOf = new Map(stock.map((s) => [s.productId, s.onHand]));
+  const rackOf = new Map(stock.map((s) => [s.productId, s.rackId]));
 
   const rows = products.map((p) => ({
     id: p.id,
@@ -20,6 +22,7 @@ export default async function SalonInventoryPage() {
     unit: p.unit,
     retailPriceCents: p.retailPriceCents,
     onHand: onHandOf.get(p.id) ?? 0,
+    rackId: rackOf.get(p.id) ?? null,
   }));
 
   const totalUnits = rows.reduce((s, r) => s + r.onHand, 0);
@@ -45,6 +48,7 @@ export default async function SalonInventoryPage() {
             <tr className="text-left text-[11px] uppercase tracking-[0.1em] text-faint">
               <th className="font-medium px-4 py-3">Product</th>
               <th className="font-medium px-4 py-3">Category</th>
+              <th className="font-medium px-4 py-3">Rack</th>
               <th className="font-medium px-4 py-3 text-right">Retail</th>
               <th className="font-medium px-4 py-3 text-right">On shelf</th>
               <th className="font-medium px-4 py-3 text-right">Adjust</th>
@@ -58,6 +62,9 @@ export default async function SalonInventoryPage() {
                   <div className="text-xs text-faint">{r.brand} · per {r.unit}</div>
                 </td>
                 <td className="px-4 py-3 text-muted">{r.category}</td>
+                <td className="px-4 py-3">
+                  <RackCell productId={r.id} rackId={r.rackId} />
+                </td>
                 <td className="px-4 py-3 text-right tabular-nums">
                   {r.retailPriceCents > 0 ? formatMoney(r.retailPriceCents) : <span className="text-faint">—</span>}
                 </td>
