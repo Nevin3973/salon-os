@@ -29,6 +29,8 @@ export default async function AdminProductsPage() {
           retailPriceCents: p.retailPriceCents,
           gstRate: p.gstRate,
           hsn: p.hsn,
+          barcode: p.barcode,
+          binLocation: p.binLocation,
           imageUrl: p.imageUrl,
           active: p.active,
         }))}

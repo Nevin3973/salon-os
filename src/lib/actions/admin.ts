@@ -9,6 +9,7 @@ import { prisma } from "@/lib/db";
 import { requireVerifiedScopedSession, withOrg } from "@/lib/tenant";
 import { logAudit } from "@/lib/audit";
 import { productImageUrl } from "@/lib/product-image";
+import { defaultPrefix } from "@/lib/gst";
 import { sendInviteEmail } from "@/lib/actions/password";
 import { activeOrgName } from "@/lib/tenant";
 
@@ -248,6 +249,63 @@ export async function setProductIdentifiers(input: {
   revalidatePath("/admin/products");
   revalidatePath("/salon/sell");
   revalidatePath("/warehouse/queue");
+  return { ok: true };
+}
+
+// ————— Locations (branches & warehouses) —————
+
+const locationSchema = z.object({
+  name: z.string().trim().min(2).max(80),
+  type: z.enum(["BRANCH", "WAREHOUSE"]),
+  /** Invoice prefix for a branch, e.g. "IND". Derived from the name if blank. */
+  invoicePrefix: z.string().trim().max(6).optional(),
+});
+
+/**
+ * Adds a salon branch or a warehouse. A branch also needs an invoice prefix —
+ * its bills are numbered on their own per-year series — so one is derived from
+ * the name when the admin doesn't supply it.
+ */
+export async function createLocation(input: {
+  name: string;
+  type: "BRANCH" | "WAREHOUSE";
+  invoicePrefix?: string;
+}): Promise<AdminResult> {
+  const parsed = locationSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Check the location details." };
+  }
+  const { session, db } = await requireVerifiedScopedSession("SUPER_ADMIN");
+
+  const existing = await db.location.findFirst({
+    where: { name: parsed.data.name, type: parsed.data.type },
+  });
+  if (existing) return { ok: false, error: `${parsed.data.name} already exists.` };
+
+  const prefix =
+    parsed.data.type === "BRANCH"
+      ? (parsed.data.invoicePrefix?.toUpperCase() || defaultPrefix(parsed.data.name))
+      : null;
+
+  const location = await db.location.create({
+    data: {
+      orgId: session.orgId,
+      name: parsed.data.name,
+      type: parsed.data.type,
+      invoicePrefix: prefix,
+    },
+  });
+  await logAudit(prisma, {
+    orgId: session.orgId,
+    userId: session.userId,
+    userName: session.name,
+    action: `Added ${parsed.data.type === "BRANCH" ? "branch" : "warehouse"} ${location.name}`,
+    entityType: "Location",
+    entityId: location.id,
+  });
+
+  revalidatePath("/admin/users");
+  revalidatePath("/admin/codes");
   return { ok: true };
 }
 

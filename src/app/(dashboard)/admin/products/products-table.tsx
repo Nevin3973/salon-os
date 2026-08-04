@@ -2,7 +2,12 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { toggleProductActive, createProduct, setSalePricing } from "@/lib/actions/admin";
+import {
+  toggleProductActive,
+  createProduct,
+  setSalePricing,
+  setProductIdentifiers,
+} from "@/lib/actions/admin";
 import { formatMoney, parseMoneyToMinor } from "@/lib/money";
 import { ProductImageCell } from "./image-upload";
 
@@ -20,6 +25,8 @@ type Row = {
   retailPriceCents: number;
   gstRate: number;
   hsn: string | null;
+  barcode: string | null;
+  binLocation: string | null;
   imageUrl: string | null;
   active: boolean;
 };
@@ -70,6 +77,7 @@ export function ProductsTable({ products, categories }: { products: Row[]; categ
               <th className="font-medium px-4 py-3">SKU</th>
               <th className="font-medium px-4 py-3">Product</th>
               <th className="font-medium px-4 py-3">Category</th>
+              <th className="font-medium px-4 py-3">Barcode / Bin</th>
               <th className="font-medium px-4 py-3 text-right">Cost</th>
               <th className="font-medium px-4 py-3 text-right">Retail (GST)</th>
               <th className="font-medium px-4 py-3 text-right">Stock</th>
@@ -89,6 +97,7 @@ export function ProductsTable({ products, categories }: { products: Row[]; categ
                   <div className="text-xs text-faint">{p.brand} · per {p.unit}</div>
                 </td>
                 <td className="px-4 py-3 text-muted">{p.category}</td>
+                <td className="px-4 py-3"><IdentifiersCell row={p} /></td>
                 <td className="px-4 py-3 text-right tabular-nums">{formatMoney(p.priceCents)}</td>
                 <td className="px-4 py-3 text-right"><RetailCell row={p} /></td>
                 <td className="px-4 py-3 text-right tabular-nums">{p.stock}</td>
@@ -131,6 +140,75 @@ export function ProductsTable({ products, categories }: { products: Row[]; categ
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Barcode and warehouse bin. The barcode is what a counter scanner actually
+ * reads, so without one here the scan-to-bill flow can't find the product.
+ */
+function IdentifiersCell({ row }: { row: Row }) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [barcode, setBarcode] = useState(row.barcode ?? "");
+  const [bin, setBin] = useState(row.binLocation ?? "");
+  const [error, setError] = useState("");
+  const [pending, startTransition] = useTransition();
+
+  function save() {
+    setError("");
+    startTransition(async () => {
+      const res = await setProductIdentifiers({
+        productId: row.id,
+        barcode: barcode.trim(),
+        binLocation: bin.trim(),
+      });
+      if (res.ok) { setOpen(false); router.refresh(); }
+      else setError(res.error);
+    });
+  }
+
+  if (!open) {
+    return (
+      <button onClick={() => setOpen(true)} className="text-left cursor-pointer group" title="Set the barcode and warehouse bin">
+        {row.barcode ? (
+          <span className="font-mono text-xs">{row.barcode}</span>
+        ) : (
+          <span className="text-xs text-out font-medium">No barcode</span>
+        )}
+        {row.binLocation && <span className="block text-[11px] text-faint">bin {row.binLocation}</span>}
+        {!row.binLocation && <span className="block text-[11px] text-faint group-hover:text-velvet">+ bin</span>}
+      </button>
+    );
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <input
+        value={barcode}
+        onChange={(e) => setBarcode(e.target.value.replace(/[^0-9]/g, ""))}
+        onKeyDown={(e) => { if (e.key === "Enter") save(); if (e.key === "Escape") setOpen(false); }}
+        placeholder="Scan or type barcode"
+        aria-label="Barcode"
+        maxLength={14}
+        autoFocus
+        className="w-40 h-8 bg-bg border border-line rounded-[6px] px-2 text-xs font-mono outline-none focus:border-velvet"
+      />
+      <input
+        value={bin}
+        onChange={(e) => setBin(e.target.value)}
+        onKeyDown={(e) => { if (e.key === "Enter") save(); if (e.key === "Escape") setOpen(false); }}
+        placeholder="Bin"
+        aria-label="Warehouse bin"
+        maxLength={24}
+        className="w-20 h-8 bg-bg border border-line rounded-[6px] px-2 text-xs outline-none focus:border-velvet"
+      />
+      <button onClick={save} disabled={pending} className="h-8 px-2.5 rounded-[6px] bg-velvet text-on-velvet text-xs font-semibold disabled:opacity-50 cursor-pointer">
+        {pending ? "…" : "Save"}
+      </button>
+      <button onClick={() => setOpen(false)} className="h-8 px-1.5 text-xs text-muted cursor-pointer">✕</button>
+      {error && <span className="text-out text-[11px] w-full">{error}</span>}
     </div>
   );
 }

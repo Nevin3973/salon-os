@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Role } from "@prisma/client";
-import { createUserWithMembership } from "@/lib/actions/admin";
+import { createUserWithMembership, createLocation } from "@/lib/actions/admin";
 import { fmtDate } from "@/lib/format";
 
 type Member = { id: string; name: string; email: string; role: string; location: string; since: string };
@@ -15,11 +15,20 @@ const inputCls =
 export function UsersPanel({ members, locations }: { members: Member[]; locations: Loc[] }) {
   const router = useRouter();
   const [adding, setAdding] = useState(false);
+  const [addingLocation, setAddingLocation] = useState(false);
   const [issued, setIssued] = useState<{ email: string; password: string; invited: boolean } | null>(null);
 
   return (
     <div className="mt-5">
-      <div className="flex justify-end mb-4">
+      <div className="flex justify-end gap-2 mb-4">
+        {!addingLocation && !adding && (
+          <button
+            onClick={() => setAddingLocation(true)}
+            className="h-10 px-4 rounded-[6px] border border-line text-sm font-semibold text-muted hover:text-ink hover:border-velvet/40 transition-colors cursor-pointer"
+          >
+            Add salon or warehouse
+          </button>
+        )}
         {!adding && (
           <button
             onClick={() => { setAdding(true); setIssued(null); }}
@@ -29,6 +38,13 @@ export function UsersPanel({ members, locations }: { members: Member[]; location
           </button>
         )}
       </div>
+
+      {addingLocation && (
+        <AddLocationForm
+          onDone={() => { setAddingLocation(false); router.refresh(); }}
+          onCancel={() => setAddingLocation(false)}
+        />
+      )}
 
       {issued && (
         <div className="bg-surface border border-velvet/40 rounded-[10px] p-5 mb-4">
@@ -93,6 +109,68 @@ export function UsersPanel({ members, locations }: { members: Member[]; location
         </table>
       </div>
     </div>
+  );
+}
+
+/** Adds a salon branch or a warehouse to the workspace. */
+function AddLocationForm({ onDone, onCancel }: { onDone: () => void; onCancel: () => void }) {
+  const [name, setName] = useState("");
+  const [type, setType] = useState<"BRANCH" | "WAREHOUSE">("BRANCH");
+  const [prefix, setPrefix] = useState("");
+  const [error, setError] = useState("");
+  const [pending, startTransition] = useTransition();
+
+  function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setError("");
+    startTransition(async () => {
+      const res = await createLocation({ name, type, invoicePrefix: prefix.trim() || undefined });
+      if (res.ok) onDone();
+      else setError(res.error);
+    });
+  }
+
+  return (
+    <form onSubmit={submit} className="bg-surface border border-velvet/40 rounded-[10px] p-5 mb-4">
+      <div className="font-medium mb-1">Add a salon or warehouse</div>
+      <p className="text-muted text-xs mb-4">
+        A salon bills customers and holds its own shelf stock. A warehouse supplies the salons.
+      </p>
+      <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
+        <L label="Name">
+          <input value={name} onChange={(e) => setName(e.target.value)} required className={inputCls}
+            placeholder="e.g. Indiranagar" />
+        </L>
+        <L label="Type">
+          <select value={type} onChange={(e) => setType(e.target.value as "BRANCH" | "WAREHOUSE")} className={inputCls}>
+            <option value="BRANCH">Salon branch</option>
+            <option value="WAREHOUSE">Warehouse</option>
+          </select>
+        </L>
+        {type === "BRANCH" && (
+          <L label="Invoice prefix">
+            <input value={prefix} onChange={(e) => setPrefix(e.target.value.toUpperCase())} maxLength={6}
+              placeholder="from the name" className={inputCls} />
+          </L>
+        )}
+      </div>
+      {type === "BRANCH" && (
+        <p className="text-faint text-xs mt-2">
+          Bills from this salon are numbered {prefix.trim() || "XXX"}/25-26/0001, restarting each financial year.
+        </p>
+      )}
+      {error && <p className="text-out text-sm mt-3">{error}</p>}
+      <div className="flex gap-3 mt-4">
+        <button type="submit" disabled={pending}
+          className="h-10 px-5 rounded-[6px] bg-velvet text-on-velvet text-sm font-semibold hover:bg-velvet-dark transition-colors disabled:opacity-50 cursor-pointer">
+          {pending ? "Adding…" : "Add"}
+        </button>
+        <button type="button" onClick={onCancel}
+          className="h-10 px-4 rounded-[6px] border border-line text-sm text-muted hover:text-ink transition-colors cursor-pointer">
+          Cancel
+        </button>
+      </div>
+    </form>
   );
 }
 
