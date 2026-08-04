@@ -31,7 +31,7 @@ export default function LoginPage() {
       <div className="flex-1 flex items-center justify-center px-6">
         <div className="w-full max-w-sm">
           <div className="font-display text-3xl text-ink select-none">
-            Beyond<span className="text-velvet"> Demands</span>
+            Salon<span className="text-velvet"> OS</span>
           </div>
           <p className="text-muted text-sm mt-2">Sign in to your workspace.</p>
 
@@ -81,7 +81,7 @@ export default function LoginPage() {
           </form>
         </div>
       </div>
-      <p className="text-center text-faint text-xs pb-6">Beyond Demands · by Infynix Growth Solutions</p>
+      <p className="text-center text-faint text-xs pb-6">Salon OS · from Beyond Demands</p>
     </div>
   );
 }

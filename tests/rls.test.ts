@@ -5,20 +5,29 @@ import { PrismaClient } from "@prisma/client";
  * Integration test against the local dev database: proves the Postgres
  * row-level-security wall holds regardless of what application code does.
  *
- * Requires the dev DB (docker: salonos-postgres) with the seeded demo orgs.
+ * Requires the dev DB (docker: salonos-postgres) with at least two orgs.
+ *
+ * Deliberately takes whatever two tenants it finds rather than naming them.
+ * It used to pin the slug "beyond", which quietly broke the moment that org was
+ * renamed in the rebrand — the wall was still standing, but the test could no
+ * longer tell you so. What is under test is isolation between any two tenants;
+ * which two is irrelevant.
  */
 
 const prisma = new PrismaClient();
-let beyondId: string;
-let bellissimaId: string;
+let orgAId: string;
+let orgBId: string;
 
 beforeAll(async () => {
-  const orgs = await prisma.org.findMany(); // Org is deliberately RLS-exempt
-  const beyond = orgs.find((o) => o.slug === "beyond");
-  const bellissima = orgs.find((o) => o.slug === "bellissima");
-  if (!beyond || !bellissima) throw new Error("Seeded demo orgs not found — run prisma db seed first");
-  beyondId = beyond.id;
-  bellissimaId = bellissima.id;
+  const orgs = await prisma.org.findMany({ orderBy: { slug: "asc" } }); // Org is deliberately RLS-exempt
+  if (orgs.length < 2) {
+    throw new Error(
+      `Need at least two orgs to test tenant isolation; found ${orgs.length}. ` +
+        `Run \`prisma db seed\` against the dev database.`
+    );
+  }
+  orgAId = orgs[0].id;
+  orgBId = orgs[1].id;
 });
 
 afterAll(async () => {
@@ -41,14 +50,14 @@ describe("Postgres row-level security", () => {
   });
 
   it("returns only the org's own products when its context is set", async () => {
-    const beyondCount = await withOrgTx(beyondId, (tx) => tx.product.count());
-    const bellaCount = await withOrgTx(bellissimaId, (tx) => tx.product.count());
-    expect(beyondCount).toBeGreaterThan(0);
-    expect(bellaCount).toBeGreaterThan(0);
+    const orgACount = await withOrgTx(orgAId, (tx) => tx.product.count());
+    const orgBCount = await withOrgTx(orgBId, (tx) => tx.product.count());
+    expect(orgACount).toBeGreaterThan(0);
+    expect(orgBCount).toBeGreaterThan(0);
 
-    // Beyond Demands's context must see zero Bellissima rows even when asking for them directly.
-    const crossRead = await withOrgTx(beyondId, (tx) =>
-      tx.product.count({ where: { orgId: bellissimaId } })
+    // One tenant's context must see zero of the other's rows, even asking directly.
+    const crossRead = await withOrgTx(orgAId, (tx) =>
+      tx.product.count({ where: { orgId: orgBId } })
     );
     expect(crossRead).toBe(0);
   });
@@ -63,17 +72,17 @@ describe("Postgres row-level security", () => {
 
     // With a context the same query succeeds (count reflects only that org —
     // may legitimately be 0 on a fresh database).
-    const beyondOrders = await withOrgTx(beyondId, (tx) => tx.order.count());
-    expect(beyondOrders).toBeGreaterThanOrEqual(0);
+    const orgAOrders = await withOrgTx(orgAId, (tx) => tx.order.count());
+    expect(orgAOrders).toBeGreaterThanOrEqual(0);
   });
 
   it("rejects writes that carry another org's id", async () => {
-    // Under Beyond Demands's context, try to plant a product into Bellissima.
+    // Under tenant A's context, try to plant a product into tenant B.
     await expect(
-      withOrgTx(beyondId, (tx) =>
+      withOrgTx(orgAId, (tx) =>
         tx.product.create({
           data: {
-            orgId: bellissimaId,
+            orgId: orgBId,
             sku: `EVIL-${Date.now()}`,
             name: "Should never exist",
             brand: "x",
@@ -88,7 +97,7 @@ describe("Postgres row-level security", () => {
   it("rejects writes with no org context at all", async () => {
     await expect(
       prisma.auditLogEntry.create({
-        data: { orgId: beyondId, action: "should be blocked" },
+        data: { orgId: orgAId, action: "should be blocked" },
       })
     ).rejects.toThrow();
   });

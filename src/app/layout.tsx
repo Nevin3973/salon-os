@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Marcellus, Inter } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
+import { APP_TITLE } from "@/lib/brand";
 
 const marcellus = Marcellus({
   variable: "--font-marcellus",
@@ -18,8 +19,9 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Beyond Demands",
-  description: "Order, track and manage salon supplies in one place",
+  title: APP_TITLE,
+  description:
+    "Order supplies, track dispatch, and bill customers — one system for every salon in the group.",
 };
 
 export default function RootLayout({

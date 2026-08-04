@@ -20,7 +20,7 @@ const prisma = new PrismaClient({
   datasourceUrl: process.env.DIRECT_URL ?? process.env.DATABASE_URL,
 });
 
-const DEMO_SLUGS = ["beyond", "bellissima"];
+const DEMO_SLUGS = ["aster", "beyond", "bellissima"];
 
 /** Tables carrying an RLS policy; enforcement pauses while we delete. */
 const TENANT_TABLES = [

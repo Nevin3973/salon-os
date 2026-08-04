@@ -1,4 +1,5 @@
 import { Resend } from "resend";
+import { PRODUCT_NAME, POWERED_BY } from "@/lib/brand";
 
 /**
  * Transactional email. Degrades gracefully: with no API key configured the
@@ -10,7 +11,7 @@ import { Resend } from "resend";
  */
 
 const KEY = process.env.RESEND_API_KEY;
-const FROM = process.env.EMAIL_FROM ?? "Beyond Demands <onboarding@resend.dev>";
+const FROM = process.env.EMAIL_FROM ?? `${PRODUCT_NAME} <onboarding@resend.dev>`;
 
 export function appUrl(): string {
   return (
@@ -67,12 +68,12 @@ function renderHtml(heading: string, lines: string[], cta?: { label: string; url
     : "";
   return `<!doctype html><html><body style="margin:0;background:#f4f4f5;padding:28px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif">
   <div style="max-width:520px;margin:0 auto;background:#fff;border:1px solid #e5e5e5;border-radius:12px;padding:28px">
-    <div style="font-size:19px;font-weight:700;color:#111;margin-bottom:4px">Beyond<span style="color:#b8860b"> Demands</span></div>
+    <div style="font-size:19px;font-weight:700;color:#111;margin-bottom:4px">Salon<span style="color:#b8860b"> OS</span></div>
     <h1 style="font-size:17px;color:#111;margin:18px 0 14px">${esc(heading)}</h1>
     ${body}
     ${button}
     <p style="margin:22px 0 0;border-top:1px solid #eee;padding-top:14px;color:#999;font-size:12px">
-      Beyond Demands · salon supply. If this wasn't you, you can ignore this email.
+      ${POWERED_BY}. If this wasn't you, you can ignore this email.
     </p>
   </div></body></html>`;
 }

@@ -13,7 +13,7 @@ export default async function ResetPasswordPage({
       <div className="flex-1 flex items-center justify-center px-6">
         <div className="w-full max-w-sm">
           <div className="font-display text-3xl select-none">
-            Beyond<span className="text-velvet"> Demands</span>
+            Salon<span className="text-velvet"> OS</span>
           </div>
 
           {token ? (
@@ -44,7 +44,7 @@ export default async function ResetPasswordPage({
           </Link>
         </div>
       </div>
-      <p className="text-center text-faint text-xs pb-6">Beyond Demands · by Infynix Growth Solutions</p>
+      <p className="text-center text-faint text-xs pb-6">Salon OS · from Beyond Demands</p>
     </div>
   );
 }

@@ -731,10 +731,10 @@ async function main() {
   try {
     await reset();
 
-    console.log("Org: Beyond Demands");
+    console.log("Org: Aster Salon Group");
     const beyond = await seedOrg({
-      name: "Beyond Demands",
-      slug: "beyond",
+      name: "Aster Salon Group",
+      slug: "aster",
       products: beyondProducts(),
       branchNames: ["Rosewood Avenue", "Marina Walk", "Palm District"],
       warehouseName: "Central Warehouse",
