@@ -3,13 +3,14 @@
 import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { formatMoney } from "@/lib/money";
-import { lineGst, billTotals } from "@/lib/gst";
+import { lineGst, billTotals, type BillTotals } from "@/lib/gst";
 import { PAYMENT_MODES, PAYMENT_MODE_LABEL, type PaymentModeValue } from "@/lib/constants";
 import { recordSale } from "@/lib/actions/sales";
 
 export type Sellable = {
   productId: string;
   sku: string;
+  barcode: string | null;
   name: string;
   brand: string;
   unit: string;
@@ -35,8 +36,11 @@ export function PosTerminal({ items }: { items: Sellable[] }) {
   );
 
   const [cart, setCart] = useState<Map<string, number>>(new Map());
+  /** Per-product discount in paise, applied before GST. */
+  const [discounts, setDiscounts] = useState<Map<string, number>>(new Map());
   const [search, setSearch] = useState("");
   const [cat, setCat] = useState("All");
+  const [buyerGstin, setBuyerGstin] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
   const [showCustomer, setShowCustomer] = useState(false);
   const [customerName, setCustomerName] = useState("");
@@ -53,25 +57,39 @@ export function PosTerminal({ items }: { items: Sellable[] }) {
       i.name.toLowerCase().includes(q) ||
       i.brand.toLowerCase().includes(q) ||
       i.sku.toLowerCase().includes(q) ||
+      (i.barcode?.includes(q) ?? false) ||
       (i.rackId?.toLowerCase().includes(q) ?? false) ||
       i.category.toLowerCase().includes(q)
     );
   });
 
-  // Enter adds instantly: an exact SKU match (barcode scanner types SKU + Enter)
-  // wins, otherwise the single remaining result. Then clear + refocus to scan on.
+  /**
+   * Enter adds instantly. A hand scanner types the pack's barcode then Enter,
+   * so an exact barcode match wins first, then an exact SKU, then the single
+   * remaining result. Clearing and refocusing lets the next scan follow straight
+   * on; an unrecognised code says so rather than silently doing nothing.
+   */
   function onSearchKey(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key !== "Enter") return;
     e.preventDefault();
     if (!q) return;
-    const exact = items.find((i) => i.sku.toLowerCase() === q);
-    const target = exact ?? (shown.length === 1 ? shown[0] : null);
-    if (target && (cart.get(target.productId) ?? 0) < target.onHand) {
-      add(target.productId);
-      setSearch("");
-      setCat("All");
-      searchRef.current?.focus();
+    const target =
+      items.find((i) => i.barcode && i.barcode === search.trim()) ??
+      items.find((i) => i.sku.toLowerCase() === q) ??
+      (shown.length === 1 ? shown[0] : null);
+
+    if (!target) {
+      if (/^[0-9]{8,14}$/.test(search.trim())) setError(`No product carries the barcode ${search.trim()}.`);
+      return;
     }
+    if ((cart.get(target.productId) ?? 0) >= target.onHand) {
+      setError(`${target.name} — only ${target.onHand} on the shelf.`);
+      return;
+    }
+    add(target.productId);
+    setSearch("");
+    setCat("All");
+    searchRef.current?.focus();
   }
 
   function setQty(productId: string, qty: number) {
@@ -84,15 +102,44 @@ export function PosTerminal({ items }: { items: Sellable[] }) {
       else next.set(productId, clamped);
       return next;
     });
+    // Dropping a line drops its discount with it.
+    if (qty <= 0) {
+      setDiscounts((prev) => {
+        if (!prev.has(productId)) return prev;
+        const next = new Map(prev);
+        next.delete(productId);
+        return next;
+      });
+    }
   }
   const add = (productId: string) => setQty(productId, (cart.get(productId) ?? 0) + 1);
 
+  /** Discount is capped at the line's gross so a line can never go negative. */
+  function setDiscount(productId: string, cents: number) {
+    setError("");
+    const p = byId.get(productId);
+    const gross = (p?.retailPriceCents ?? 0) * (cart.get(productId) ?? 0);
+    setDiscounts((prev) => {
+      const next = new Map(prev);
+      const clamped = Math.max(0, Math.min(Math.round(cents), gross));
+      if (clamped === 0) next.delete(productId);
+      else next.set(productId, clamped);
+      return next;
+    });
+  }
+
   const lines = [...cart.entries()].map(([productId, qty]) => {
     const p = byId.get(productId)!;
-    return { p, qty, ...lineGst(p.retailPriceCents, qty, p.gstRate) };
+    const discountCents = Math.min(discounts.get(productId) ?? 0, p.retailPriceCents * qty);
+    return { p, qty, discountCents, ...lineGst(p.retailPriceCents, qty, p.gstRate, discountCents) };
   });
   const totals = billTotals(
-    lines.map((l) => ({ unitPriceCents: l.p.retailPriceCents, qty: l.qty, gstRate: l.p.gstRate }))
+    lines.map((l) => ({
+      unitPriceCents: l.p.retailPriceCents,
+      qty: l.qty,
+      gstRate: l.p.gstRate,
+      discountCents: l.discountCents,
+    }))
   );
   const unitCount = lines.reduce((s, l) => s + l.qty, 0);
 
@@ -101,9 +148,14 @@ export function PosTerminal({ items }: { items: Sellable[] }) {
     setError("");
     startTransition(async () => {
       const res = await recordSale({
-        lines: lines.map((l) => ({ productId: l.p.productId, qty: l.qty })),
+        lines: lines.map((l) => ({
+          productId: l.p.productId,
+          qty: l.qty,
+          discountCents: l.discountCents || undefined,
+        })),
         customerName: customerName.trim() || undefined,
         customerPhone: customerPhone.trim() || undefined,
+        buyerGstin: buyerGstin.trim() || undefined,
         paymentMode,
       });
       if (res.ok) router.push(`/salon/bills/${res.saleId}?new=1`);
@@ -201,12 +253,15 @@ export function PosTerminal({ items }: { items: Sellable[] }) {
             totals={totals}
             unitCount={unitCount}
             setQty={setQty}
+            setDiscount={setDiscount}
             showCustomer={showCustomer}
             setShowCustomer={setShowCustomer}
             customerName={customerName}
             setCustomerName={setCustomerName}
             customerPhone={customerPhone}
             setCustomerPhone={setCustomerPhone}
+            buyerGstin={buyerGstin}
+            setBuyerGstin={setBuyerGstin}
             paymentMode={paymentMode}
             setPaymentMode={setPaymentMode}
             error={error}
@@ -222,12 +277,15 @@ export function PosTerminal({ items }: { items: Sellable[] }) {
         totals={totals}
         unitCount={unitCount}
         setQty={setQty}
+        setDiscount={setDiscount}
         showCustomer={showCustomer}
         setShowCustomer={setShowCustomer}
         customerName={customerName}
         setCustomerName={setCustomerName}
         customerPhone={customerPhone}
         setCustomerPhone={setCustomerPhone}
+        buyerGstin={buyerGstin}
+        setBuyerGstin={setBuyerGstin}
         paymentMode={paymentMode}
         setPaymentMode={setPaymentMode}
         error={error}
@@ -238,18 +296,28 @@ export function PosTerminal({ items }: { items: Sellable[] }) {
   );
 }
 
-type Line = { p: Sellable; qty: number; netCents: number; taxCents: number; totalCents: number };
+type Line = {
+  p: Sellable;
+  qty: number;
+  discountCents: number;
+  netCents: number;
+  taxCents: number;
+  totalCents: number;
+};
 type PanelProps = {
   lines: Line[];
-  totals: { subtotalCents: number; taxCents: number; totalCents: number };
+  totals: BillTotals;
   unitCount: number;
   setQty: (id: string, qty: number) => void;
+  setDiscount: (id: string, cents: number) => void;
   showCustomer: boolean;
   setShowCustomer: (v: boolean) => void;
   customerName: string;
   setCustomerName: (v: string) => void;
   customerPhone: string;
   setCustomerPhone: (v: string) => void;
+  buyerGstin: string;
+  setBuyerGstin: (v: string) => void;
   paymentMode: PaymentModeValue;
   setPaymentMode: (v: PaymentModeValue) => void;
   error: string;
@@ -258,8 +326,9 @@ type PanelProps = {
 };
 
 function BillPanel(props: PanelProps) {
-  const { lines, totals, unitCount, setQty, showCustomer, setShowCustomer, customerName, setCustomerName,
-    customerPhone, setCustomerPhone, paymentMode, setPaymentMode, error, pending, complete } = props;
+  const { lines, totals, unitCount, setQty, setDiscount, showCustomer, setShowCustomer, customerName,
+    setCustomerName, customerPhone, setCustomerPhone, buyerGstin, setBuyerGstin, paymentMode,
+    setPaymentMode, error, pending, complete } = props;
 
   return (
     <>
@@ -276,7 +345,7 @@ function BillPanel(props: PanelProps) {
         ) : (
           <div className="space-y-1.5">
             {lines.map((l) => (
-              <BillLine key={l.p.productId} line={l} setQty={setQty} />
+              <BillLine key={l.p.productId} line={l} setQty={setQty} setDiscount={setDiscount} />
             ))}
           </div>
         )}
@@ -284,8 +353,17 @@ function BillPanel(props: PanelProps) {
 
       <div className="border-t border-line px-5 py-4 space-y-3 shrink-0">
         <div className="space-y-1 text-sm">
+          {totals.discountCents > 0 && (
+            <Row label="Discount" value={`− ${formatMoney(totals.discountCents)}`} tone="good" />
+          )}
           <Row label="Taxable" value={formatMoney(totals.subtotalCents)} />
           <Row label="GST" value={formatMoney(totals.taxCents)} />
+          {totals.roundOffCents !== 0 && (
+            <Row
+              label="Round off"
+              value={`${totals.roundOffCents > 0 ? "+" : "−"} ${formatMoney(Math.abs(totals.roundOffCents))}`}
+            />
+          )}
         </div>
 
         {showCustomer ? (
@@ -294,6 +372,9 @@ function BillPanel(props: PanelProps) {
               className="w-full bg-bg border border-line rounded-lg px-3 h-10 text-sm focus:border-velvet outline-none" />
             <input value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} placeholder="Phone" inputMode="tel"
               className="w-full bg-bg border border-line rounded-lg px-3 h-10 text-sm focus:border-velvet outline-none" />
+            <input value={buyerGstin} onChange={(e) => setBuyerGstin(e.target.value.toUpperCase())}
+              placeholder="Buyer GSTIN (for a business bill)" maxLength={15} autoCapitalize="characters"
+              className="w-full bg-bg border border-line rounded-lg px-3 h-10 text-sm font-mono tracking-wide focus:border-velvet outline-none" />
           </div>
         ) : (
           <button onClick={() => setShowCustomer(true)}
@@ -323,17 +404,65 @@ function BillPanel(props: PanelProps) {
   );
 }
 
-function BillLine({ line, setQty }: { line: Line; setQty: (id: string, qty: number) => void }) {
+function BillLine({
+  line,
+  setQty,
+  setDiscount,
+}: {
+  line: Line;
+  setQty: (id: string, qty: number) => void;
+  setDiscount: (id: string, cents: number) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+
+  function apply() {
+    const rupees = Number(draft.replace(/[^0-9.]/g, ""));
+    setDiscount(line.p.productId, Number.isFinite(rupees) ? Math.round(rupees * 100) : 0);
+    setEditing(false);
+  }
+
   return (
-    <div className="flex items-center gap-2 bg-bg rounded-xl p-2">
-      <div className="min-w-0 flex-1 pl-1">
-        <div className="text-sm font-medium truncate">{line.p.name}</div>
-        <div className="text-[11px] text-faint tabular-nums">
-          {line.p.rackId && <span className="text-velvet font-semibold">📍 {line.p.rackId} · </span>}
-          {formatMoney(line.totalCents)}
+    <div className="bg-bg rounded-xl p-2">
+      <div className="flex items-center gap-2">
+        <div className="min-w-0 flex-1 pl-1">
+          <div className="text-sm font-medium truncate">{line.p.name}</div>
+          <div className="text-[11px] text-faint tabular-nums">
+            {line.p.rackId && <span className="text-velvet font-semibold">📍 {line.p.rackId} · </span>}
+            {formatMoney(line.totalCents)}
+            {line.discountCents > 0 && (
+              <span className="text-in font-semibold"> · −{formatMoney(line.discountCents)}</span>
+            )}
+          </div>
         </div>
+        <Stepper value={line.qty} max={line.p.onHand} onChange={(n) => setQty(line.p.productId, n)} />
       </div>
-      <Stepper value={line.qty} max={line.p.onHand} onChange={(n) => setQty(line.p.productId, n)} />
+
+      {editing ? (
+        <div className="flex items-center gap-1.5 mt-1.5 pl-1">
+          <span className="text-[11px] text-faint">Discount ₹</span>
+          <input
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") apply(); if (e.key === "Escape") setEditing(false); }}
+            inputMode="decimal"
+            autoFocus
+            aria-label={`Discount for ${line.p.name}`}
+            className="w-20 h-8 bg-surface border border-line rounded-lg px-2 text-sm tabular-nums outline-none focus:border-velvet"
+          />
+          <button onClick={apply} className="h-8 px-2.5 rounded-lg bg-velvet text-on-velvet text-xs font-semibold cursor-pointer">
+            Apply
+          </button>
+          <button onClick={() => setEditing(false)} className="h-8 px-1.5 text-xs text-muted cursor-pointer">✕</button>
+        </div>
+      ) : (
+        <button
+          onClick={() => { setDraft(line.discountCents ? String(line.discountCents / 100) : ""); setEditing(true); }}
+          className="mt-1 ml-1 text-[11px] font-semibold text-muted hover:text-velvet cursor-pointer"
+        >
+          {line.discountCents > 0 ? "Edit discount" : "+ Discount"}
+        </button>
+      )}
     </div>
   );
 }
@@ -354,9 +483,9 @@ function Stepper({ value, max, onChange }: { value: number; max: number; onChang
   );
 }
 
-function Row({ label, value }: { label: string; value: string }) {
+function Row({ label, value, tone }: { label: string; value: string; tone?: "good" }) {
   return (
-    <div className="flex justify-between text-muted">
+    <div className={`flex justify-between ${tone === "good" ? "text-in" : "text-muted"}`}>
       <span>{label}</span>
       <span className="tabular-nums">{value}</span>
     </div>

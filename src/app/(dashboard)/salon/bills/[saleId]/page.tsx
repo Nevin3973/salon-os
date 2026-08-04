@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db";
 import { requireScopedSession, activeOrgName } from "@/lib/tenant";
 import { fmtDateTime } from "@/lib/format";
 import { formatMoney } from "@/lib/money";
-import { lineGst, gstBreakdown, invoiceCode } from "@/lib/gst";
+import { lineGst, gstBreakdown } from "@/lib/gst";
 import { PAYMENT_MODE_LABEL, type PaymentModeValue } from "@/lib/constants";
 import { InvoiceActions } from "./invoice-actions";
 
@@ -27,7 +27,11 @@ export default async function InvoicePage({
       branchId: session.locationId ?? undefined,
       ...(isManager ? {} : { soldByUserId: session.userId }),
     },
-    include: { items: true, branch: { select: { name: true } } },
+    include: {
+      items: true,
+      branch: { select: { name: true } },
+      returns: { include: { items: true }, orderBy: { createdAt: "asc" } },
+    },
   });
   if (!sale) notFound();
 
@@ -40,8 +44,14 @@ export default async function InvoicePage({
 
   const sellerName = org?.legalName || org?.name || orgName;
   const voided = sale.status === "VOID";
+  const returnable = sale.items.some((it) => it.qty > it.returnedQty);
   const breakdown = gstBreakdown(
-    sale.items.map((it) => ({ unitPriceCents: it.unitPriceCents, qty: it.qty, gstRate: it.gstRate }))
+    sale.items.map((it) => ({
+      unitPriceCents: it.unitPriceCents,
+      qty: it.qty,
+      gstRate: it.gstRate,
+      discountCents: it.discountCents,
+    }))
   );
   const addressLine = address
     ? [address.line1, address.line2, address.city, address.state, address.postalCode].filter(Boolean).join(", ")
@@ -51,7 +61,17 @@ export default async function InvoicePage({
     <div className="max-w-3xl">
       <div className="no-print flex items-center justify-between gap-3 mb-4">
         <Link href="/salon/bills" className="text-sm text-muted hover:text-ink">← All bills</Link>
-        <InvoiceActions saleId={sale.id} canVoid={isManager && !voided} />
+        <InvoiceActions
+          saleId={sale.id}
+          canVoid={isManager && sale.status === "COMPLETED"}
+          canReturn={isManager && !voided && returnable}
+          lines={sale.items.map((it) => ({
+            saleItemId: it.id,
+            name: it.name,
+            qty: it.qty,
+            returnedQty: it.returnedQty,
+          }))}
+        />
       </div>
 
       {isNew && !voided && (
@@ -72,17 +92,18 @@ export default async function InvoicePage({
           </div>
           <div className="text-right">
             <div className="text-[11px] uppercase tracking-[0.18em] text-faint font-semibold">Tax Invoice</div>
-            <div className="font-semibold text-lg mt-0.5">{invoiceCode(sale.invoiceNo)}</div>
+            <div className="font-semibold text-lg mt-0.5">{sale.invoiceCode}</div>
             <div className="text-xs text-faint mt-0.5">{fmtDateTime(sale.createdAt)}</div>
             {voided && <div className="text-out font-bold text-sm mt-1">VOID</div>}
           </div>
         </div>
 
-        {(sale.customerName || sale.customerPhone) && (
+        {(sale.customerName || sale.customerPhone || sale.buyerGstin) && (
           <div className="mt-5 text-sm">
             <div className="text-[11px] uppercase tracking-wider text-faint font-semibold mb-0.5">Billed to</div>
             <div className="text-ink">{sale.customerName || "Walk-in customer"}</div>
             {sale.customerPhone && <div className="text-muted text-xs">{sale.customerPhone}</div>}
+            {sale.buyerGstin && <div className="text-muted text-xs">GSTIN: {sale.buyerGstin}</div>}
           </div>
         )}
 
@@ -94,6 +115,7 @@ export default async function InvoicePage({
                 <th className="py-2 px-2 font-medium">HSN</th>
                 <th className="py-2 px-2 font-medium text-right">Qty</th>
                 <th className="py-2 px-2 font-medium text-right">Rate</th>
+                <th className="py-2 px-2 font-medium text-right">Disc.</th>
                 <th className="py-2 px-2 font-medium text-right">Taxable</th>
                 <th className="py-2 px-2 font-medium text-right">GST</th>
                 <th className="py-2 pl-2 font-medium text-right">Amount</th>
@@ -101,13 +123,21 @@ export default async function InvoicePage({
             </thead>
             <tbody>
               {sale.items.map((it) => {
-                const g = lineGst(it.unitPriceCents, it.qty, it.gstRate);
+                const g = lineGst(it.unitPriceCents, it.qty, it.gstRate, it.discountCents);
                 return (
                   <tr key={it.id} className="border-b border-line-soft">
-                    <td className="py-2 pr-2">{it.name}</td>
+                    <td className="py-2 pr-2">
+                      {it.name}
+                      {it.returnedQty > 0 && (
+                        <span className="text-out text-xs"> · {it.returnedQty} returned</span>
+                      )}
+                    </td>
                     <td className="py-2 px-2 text-faint text-xs">{it.hsn ?? "—"}</td>
                     <td className="py-2 px-2 text-right tabular-nums">{it.qty}</td>
                     <td className="py-2 px-2 text-right tabular-nums">{formatMoney(it.unitPriceCents)}</td>
+                    <td className="py-2 px-2 text-right tabular-nums">
+                      {it.discountCents > 0 ? formatMoney(it.discountCents) : <span className="text-faint">—</span>}
+                    </td>
                     <td className="py-2 px-2 text-right tabular-nums">{formatMoney(g.netCents)}</td>
                     <td className="py-2 px-2 text-right tabular-nums">
                       {formatMoney(g.taxCents)}
@@ -148,6 +178,12 @@ export default async function InvoicePage({
           </div>
 
           <div className="sm:w-64 space-y-1.5 text-sm">
+            {sale.discountCents > 0 && (
+              <div className="flex justify-between text-muted">
+                <span>Discount</span>
+                <span className="tabular-nums">− {formatMoney(sale.discountCents)}</span>
+              </div>
+            )}
             <div className="flex justify-between text-muted">
               <span>Taxable value</span>
               <span className="tabular-nums">{formatMoney(sale.subtotalCents)}</span>
@@ -156,6 +192,14 @@ export default async function InvoicePage({
               <span>Total GST</span>
               <span className="tabular-nums">{formatMoney(sale.taxCents)}</span>
             </div>
+            {sale.roundOffCents !== 0 && (
+              <div className="flex justify-between text-muted">
+                <span>Round off</span>
+                <span className="tabular-nums">
+                  {sale.roundOffCents > 0 ? "+" : "−"} {formatMoney(Math.abs(sale.roundOffCents))}
+                </span>
+              </div>
+            )}
             <div className="flex justify-between font-semibold text-base border-t border-line pt-1.5">
               <span>Grand total</span>
               <span className="tabular-nums">{formatMoney(sale.totalCents)}</span>
@@ -170,6 +214,26 @@ export default async function InvoicePage({
         {voided && sale.voidReason && (
           <div className="mt-5 text-xs text-out border-t border-line pt-3">
             This bill was voided — {sale.voidReason}. The stock was returned to the shelf.
+          </div>
+        )}
+
+        {sale.returns.length > 0 && (
+          <div className="mt-5 border-t border-line pt-3">
+            <div className="text-[11px] uppercase tracking-wider text-faint font-semibold mb-1.5">
+              Credit notes against this invoice
+            </div>
+            <div className="space-y-1 text-xs">
+              {sale.returns.map((r) => (
+                <div key={r.id} className="flex justify-between gap-3 text-muted">
+                  <span>
+                    <span className="font-medium text-ink">{r.creditNoteCode}</span> · {fmtDateTime(r.createdAt)} ·{" "}
+                    {r.items.reduce((s, i) => s + i.qty, 0)} unit
+                    {r.items.reduce((s, i) => s + i.qty, 0) === 1 ? "" : "s"} · {r.reason}
+                  </span>
+                  <span className="tabular-nums whitespace-nowrap">− {formatMoney(r.totalCents)}</span>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 

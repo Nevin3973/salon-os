@@ -25,6 +25,8 @@ const SCOPED_MODELS = [
   "branchStock",
   "branchStockMovement",
   "sale",
+  "invoiceSeries",
+  "saleReturn",
 ] as const;
 
 /**

@@ -1,8 +1,10 @@
 import type { NextRequest } from "next/server";
 import type { OrderStatus, Role } from "@prisma/client";
 import { resolveOrgContext, unauthorized, apiError } from "@/server/api/auth";
-import { csvResponse } from "@/lib/csv";
+import { prisma } from "@/lib/db";
+import { csvResponse, toCsv, csvMoney, type CsvColumn } from "@/lib/csv";
 import { parseRange, ordersCsv, inventoryCsv, auditCsv, movementsCsv, salesCsv, type ReportScope } from "@/lib/reports";
+import { tallyXml, hsnSummary } from "@/lib/tally";
 
 /**
  * CSV downloads. Reachable from the console (browser session) and from the
@@ -33,6 +35,9 @@ const ALLOWED: Record<string, Role[]> = {
   inventory: ["WAREHOUSE_MANAGER", "SUPER_ADMIN"],
   movements: ["WAREHOUSE_MANAGER", "SUPER_ADMIN"],
   audit: ["SUPER_ADMIN"],
+  /** Accounting hand-offs: Tally voucher import and the GSTR-1 HSN table. */
+  tally: ["PURCHASE_MANAGER", "SUPER_ADMIN"],
+  hsn: ["PURCHASE_MANAGER", "SUPER_ADMIN"],
 };
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ dataset: string }> }) {
@@ -77,6 +82,43 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ data
       return csvResponse("stock-movements", await movementsCsv(scope, range));
     case "audit":
       return csvResponse("audit-log", await auditCsv(scope, range));
+
+    case "tally": {
+      // Tally matches the target company by name, so let the caller override it
+      // (?company=) when their Tally company differs from the workspace name.
+      const org = await prisma.org.findUnique({
+        where: { id: ctx.orgId },
+        select: { name: true, legalName: true },
+      });
+      const companyName =
+        sp.get("company")?.trim() || org?.legalName || org?.name || "Company";
+      const xml = await tallyXml(scope, range, { companyName });
+      return new Response(xml, {
+        headers: {
+          "Content-Type": "application/xml; charset=utf-8",
+          "Content-Disposition": `attachment; filename="tally-vouchers-${new Date()
+            .toISOString()
+            .slice(0, 10)}.xml"`,
+          "Cache-Control": "no-store",
+        },
+      });
+    }
+
+    case "hsn": {
+      const rows = await hsnSummary(scope, range);
+      type Row = (typeof rows)[number];
+      const columns: CsvColumn<Row>[] = [
+        { header: "HSN", value: (r) => r.hsn },
+        { header: "GST %", value: (r) => r.rate },
+        { header: "Quantity", value: (r) => r.qty },
+        { header: "Taxable value", value: (r) => csvMoney(r.taxableCents) },
+        { header: "CGST", value: (r) => csvMoney(r.cgstCents) },
+        { header: "SGST", value: (r) => csvMoney(r.sgstCents) },
+        { header: "Total tax", value: (r) => csvMoney(r.cgstCents + r.sgstCents) },
+      ];
+      return csvResponse("hsn-summary", toCsv(columns, rows));
+    }
+
     default:
       return apiError(404, "unknown_dataset", "No such export.");
   }

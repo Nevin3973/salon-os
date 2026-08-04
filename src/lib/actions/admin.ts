@@ -202,6 +202,55 @@ export async function setSalePricing(input: {
   return { ok: true };
 }
 
+const identifiersSchema = z.object({
+  productId: z.string().min(1),
+  /** EAN-8/13 or UPC-A as printed on the pack; digits only. Empty clears it. */
+  barcode: z.string().trim().regex(/^[0-9]{0,14}$/, "A barcode is 8–14 digits.").optional(),
+  /** Warehouse bin, e.g. "R3-B02". Empty clears it. */
+  binLocation: z.string().trim().max(24).optional(),
+});
+
+/** Sets the scannable barcode and the warehouse bin a product is picked from. */
+export async function setProductIdentifiers(input: {
+  productId: string;
+  barcode?: string;
+  binLocation?: string;
+}): Promise<AdminResult> {
+  const parsed = identifiersSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Check the barcode." };
+  }
+  const { session, db } = await requireVerifiedScopedSession("SUPER_ADMIN");
+
+  const product = await db.product.findFirst({ where: { id: parsed.data.productId } });
+  if (!product) return { ok: false, error: "Product not found." };
+
+  const barcode = parsed.data.barcode?.trim() || null;
+  if (barcode) {
+    // Barcodes must be unique within the org or a scan would be ambiguous.
+    const clash = await db.product.findFirst({ where: { barcode, NOT: { id: product.id } } });
+    if (clash) return { ok: false, error: `That barcode is already on ${clash.name}.` };
+  }
+
+  await db.product.update({
+    where: { id: product.id },
+    data: { barcode, binLocation: parsed.data.binLocation?.trim() || null },
+  });
+  await logAudit(prisma, {
+    orgId: session.orgId,
+    userId: session.userId,
+    userName: session.name,
+    action: `Updated barcode/bin for ${product.name}`,
+    entityType: "Product",
+    entityId: product.id,
+  });
+
+  revalidatePath("/admin/products");
+  revalidatePath("/salon/sell");
+  revalidatePath("/warehouse/queue");
+  return { ok: true };
+}
+
 // ————— Users —————
 
 const userSchema = z.object({

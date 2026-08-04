@@ -36,7 +36,13 @@ export default async function SalonReportsPage({
       <PageHeader
         title="Sales report"
         subtitle="What this branch has sold to customers. Pick a window, then print it or pull the raw rows as CSV."
-        actions={<ExportButton href={`/api/exports/sales?${qs}`} label="Sales CSV" tone="primary" />}
+        actions={
+          <div className="flex flex-wrap gap-2">
+            <ExportButton href={`/api/exports/sales?${qs}`} label="Sales CSV" tone="primary" />
+            <ExportButton href={`/api/exports/hsn?${qs}`} label="HSN summary" />
+            <ExportButton href={`/api/exports/tally?${qs}`} label="Tally XML" />
+          </div>
+        }
       />
 
       <div className="mb-5">
@@ -59,9 +65,14 @@ export default async function SalonReportsPage({
         ]}
       />
 
-      {totals.voided > 0 && (
+      {(totals.voided > 0 || totals.returnedCents > 0) && (
         <p className="text-xs text-faint -mt-2 mb-5">
-          Excluded from the figures above: {totals.voided} voided bill{totals.voided === 1 ? "" : "s"}.
+          {totals.voided > 0 && (
+            <>Excluded: {totals.voided} voided bill{totals.voided === 1 ? "" : "s"}. </>
+          )}
+          {totals.returnedCents > 0 && (
+            <>Figures are net of {formatMoney(totals.returnedCents)} credited back on returns.</>
+          )}
         </p>
       )}
 

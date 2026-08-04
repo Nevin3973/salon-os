@@ -2,7 +2,6 @@ import type { OrderStatus } from "@prisma/client";
 import { getScopedDb } from "@/lib/tenant";
 import { reservedByProduct, availableOf, stockState } from "@/lib/stock";
 import { orderCode, statusLabel } from "@/lib/format";
-import { invoiceCode } from "@/lib/gst";
 import { PAYMENT_MODE_LABEL, type PaymentModeValue } from "@/lib/constants";
 import { toCsv, csvMoney, type CsvColumn } from "@/lib/csv";
 
@@ -343,6 +342,14 @@ export async function monthlySummary(scope: ReportScope, range: ReportRange): Pr
 // Customer sales — the salon-manager billing report.
 // ————————————————————————————————————————————————————————
 
+/** Human labels for the sale lifecycle, used in exports. */
+const SALE_STATUS_LABEL: Record<string, string> = {
+  COMPLETED: "Completed",
+  PARTIALLY_RETURNED: "Partly returned",
+  RETURNED: "Returned",
+  VOID: "Void",
+};
+
 export type SaleDayRow = { key: string; label: string; bills: number; revenueCents: number };
 export type SaleProductRow = { name: string; units: number; revenueCents: number; marginCents: number };
 export type PayRow = { mode: PaymentModeValue; label: string; bills: number; revenueCents: number };
@@ -360,13 +367,19 @@ export type SalesSummary = {
     /** net − cost of goods sold. */
     marginCents: number;
     voided: number;
+    /** Value credited back to customers in the period. */
+    returnedCents: number;
   };
   days: SaleDayRow[];
   payments: PayRow[];
   topProducts: SaleProductRow[];
 };
 
-/** Only real, settled bills count towards revenue; VOID bills are excluded. */
+/**
+ * Only real, settled bills count towards revenue: VOID bills are excluded
+ * entirely, and anything credited back on a return is netted off the figures,
+ * so revenue and margin reflect what the branch actually kept.
+ */
 export async function salesSummary(scope: ReportScope, range: ReportRange): Promise<SalesSummary> {
   const db = getScopedDb(scope.orgId);
   const sales = await db.sale.findMany({
@@ -374,12 +387,13 @@ export async function salesSummary(scope: ReportScope, range: ReportRange): Prom
       ...(scope.branchId ? { branchId: scope.branchId } : {}),
       ...(createdAtFilter(range) ? { createdAt: createdAtFilter(range) } : {}),
     },
-    include: { items: true },
+    include: { items: true, returns: { include: { items: true } } },
     orderBy: { createdAt: "desc" },
   });
 
   const totals: SalesSummary["totals"] = {
-    bills: 0, units: 0, netCents: 0, taxCents: 0, grossCents: 0, marginCents: 0, voided: 0,
+    bills: 0, units: 0, netCents: 0, taxCents: 0, grossCents: 0, marginCents: 0,
+    voided: 0, returnedCents: 0,
   };
   const days = new Map<string, SaleDayRow>();
   const payments = new Map<PaymentModeValue, PayRow>();
@@ -390,30 +404,48 @@ export async function salesSummary(scope: ReportScope, range: ReportRange): Prom
       totals.voided++;
       continue;
     }
-    totals.bills++;
-    totals.netCents += s.subtotalCents;
-    totals.taxCents += s.taxCents;
-    totals.grossCents += s.totalCents;
-    totals.marginCents += s.subtotalCents - s.costCents;
+    // Net off whatever came back against this bill.
+    const creditNet = s.returns.reduce((n, r) => n + r.subtotalCents, 0);
+    const creditTax = s.returns.reduce((n, r) => n + r.taxCents, 0);
+    const creditGross = s.returns.reduce((n, r) => n + r.totalCents, 0);
+    // Cost of the returned units, so margin reverses with the sale.
+    const returnedCost = s.returns
+      .flatMap((r) => r.items)
+      .reduce((n, ri) => {
+        const item = s.items.find((it) => it.id === ri.saleItemId);
+        return n + (item ? item.unitCostCents * ri.qty : 0);
+      }, 0);
 
+    totals.bills++;
+    totals.returnedCents += creditGross;
+    totals.netCents += s.subtotalCents - creditNet;
+    totals.taxCents += s.taxCents - creditTax;
+    totals.grossCents += s.totalCents - creditGross;
+    totals.marginCents += s.subtotalCents - creditNet - (s.costCents - returnedCost);
+
+    const netGross = s.totalCents - creditGross;
     const key = s.createdAt.toISOString().slice(0, 10);
     const day = days.get(key) ?? { key, label: key, bills: 0, revenueCents: 0 };
     day.bills++;
-    day.revenueCents += s.totalCents;
+    day.revenueCents += netGross;
     days.set(key, day);
 
     const mode = s.paymentMode as PaymentModeValue;
     const pay = payments.get(mode) ?? { mode, label: PAYMENT_MODE_LABEL[mode], bills: 0, revenueCents: 0 };
     pay.bills++;
-    pay.revenueCents += s.totalCents;
+    pay.revenueCents += netGross;
     payments.set(mode, pay);
 
     for (const it of s.items) {
-      totals.units += it.qty;
+      // Best-seller figures count what the customer kept, not what was rung up.
+      const keptQty = it.qty - it.returnedQty;
+      if (keptQty <= 0) continue;
+      const keptNet = Math.round((it.lineNetCents * keptQty) / it.qty);
+      totals.units += keptQty;
       const p = products.get(it.name) ?? { name: it.name, units: 0, revenueCents: 0, marginCents: 0 };
-      p.units += it.qty;
-      p.revenueCents += it.lineNetCents;
-      p.marginCents += it.lineNetCents - it.unitCostCents * it.qty;
+      p.units += keptQty;
+      p.revenueCents += keptNet;
+      p.marginCents += keptNet - it.unitCostCents * keptQty;
       products.set(it.name, p);
     }
   }
@@ -443,17 +475,21 @@ export async function salesCsv(scope: ReportScope, range: ReportRange): Promise<
   const rows: Row[] = sales.flatMap((s) => s.items.map((it) => ({ ...it, sale: s })));
 
   const columns: CsvColumn<Row>[] = [
-    { header: "Invoice", value: (r) => invoiceCode(r.sale.invoiceNo) },
+    { header: "Invoice", value: (r) => r.sale.invoiceCode },
+    { header: "FY", value: (r) => r.sale.fy },
     { header: "Date", value: (r) => r.sale.createdAt.toISOString().slice(0, 10) },
-    { header: "Status", value: (r) => (r.sale.status === "VOID" ? "Void" : "Completed") },
+    { header: "Status", value: (r) => SALE_STATUS_LABEL[r.sale.status] ?? r.sale.status },
     { header: "Branch", value: (r) => r.sale.branch.name },
     { header: "Customer", value: (r) => r.sale.customerName },
     { header: "Phone", value: (r) => r.sale.customerPhone },
+    { header: "Buyer GSTIN", value: (r) => r.sale.buyerGstin },
     { header: "Payment", value: (r) => PAYMENT_MODE_LABEL[r.sale.paymentMode as PaymentModeValue] },
     { header: "Product", value: (r) => r.name },
     { header: "HSN", value: (r) => r.hsn },
     { header: "Qty", value: (r) => r.qty },
+    { header: "Returned", value: (r) => r.returnedQty },
     { header: "Unit price", value: (r) => csvMoney(r.unitPriceCents) },
+    { header: "Discount", value: (r) => csvMoney(r.discountCents) },
     { header: "Taxable", value: (r) => csvMoney(r.lineNetCents) },
     { header: "GST %", value: (r) => r.gstRate },
     { header: "GST", value: (r) => csvMoney(r.taxCents) },

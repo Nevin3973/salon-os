@@ -13,6 +13,7 @@ export type QueueItem = {
   requestedQty: number;
   deliveredQty: number;
   stock: number;
+  binLocation: string | null;
   note: string | null;
   deliveries: { qty: number; at: string }[];
 };
@@ -191,7 +192,14 @@ function OrderCard({
               <div key={it.id} className="border border-line-soft rounded-xl p-4 hover:border-velvet/20 transition-colors">
                 <div className="flex items-start gap-4 flex-wrap">
                   <div className="flex-1 min-w-[180px]">
-                    <div className="font-medium text-sm text-ink">{it.name}</div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {it.binLocation && (
+                        <span className="font-mono text-[11px] font-bold text-velvet bg-velvet-soft border border-velvet/25 rounded px-1.5 py-0.5">
+                          {it.binLocation}
+                        </span>
+                      )}
+                      <span className="font-medium text-sm text-ink">{it.name}</span>
+                    </div>
                     <div className="text-xs text-muted mt-0.5">{it.brand} · per {it.unit}</div>
                     {it.note && <div className="text-xs text-faint italic mt-1">&ldquo;{it.note}&rdquo;</div>}
                     {it.deliveries.length > 0 && (

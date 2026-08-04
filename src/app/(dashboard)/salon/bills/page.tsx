@@ -2,7 +2,6 @@ import Link from "next/link";
 import { requireScopedSession } from "@/lib/tenant";
 import { fmtDateTime } from "@/lib/format";
 import { formatMoney } from "@/lib/money";
-import { invoiceCode } from "@/lib/gst";
 import { PAYMENT_MODE_LABEL, type PaymentModeValue } from "@/lib/constants";
 import { ExportButton } from "@/components/console-ui";
 
@@ -48,6 +47,14 @@ export default async function BillsPage() {
           {sales.map((s) => {
             const units = s.items.reduce((n, it) => n + it.qty, 0);
             const void_ = s.status === "VOID";
+            const badge =
+              s.status === "VOID"
+                ? { label: "Void", cls: "text-out bg-out-soft" }
+                : s.status === "RETURNED"
+                  ? { label: "Returned", cls: "text-out bg-out-soft" }
+                  : s.status === "PARTIALLY_RETURNED"
+                    ? { label: "Part returned", cls: "text-low bg-low-soft" }
+                    : null;
             return (
               <Link
                 key={s.id}
@@ -56,10 +63,10 @@ export default async function BillsPage() {
               >
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-medium">{invoiceCode(s.invoiceNo)}</span>
-                    {void_ && (
-                      <span className="text-[11px] font-semibold text-out bg-out-soft px-1.5 py-0.5 rounded">
-                        Void
+                    <span className="font-medium">{s.invoiceCode}</span>
+                    {badge && (
+                      <span className={`text-[11px] font-semibold px-1.5 py-0.5 rounded ${badge.cls}`}>
+                        {badge.label}
                       </span>
                     )}
                   </div>

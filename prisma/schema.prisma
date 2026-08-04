@@ -43,6 +43,8 @@ model Org {
   sales       Sale[]
   branchStock BranchStock[]
   branchStockMovements BranchStockMovement[]
+  invoiceSeries InvoiceSeries[]
+  saleReturns SaleReturn[]
 }
 
 enum LocationType {
@@ -57,6 +59,9 @@ model Location {
   type     LocationType
   name     String
   isActive Boolean      @default(true)
+  /// Short code that starts this branch's invoice numbers, e.g. "ROS" →
+  /// ROS/25-26/0001. Falls back to the first letters of the name.
+  invoicePrefix String?
 
   memberships Membership[]
   orders      Order[]
@@ -64,8 +69,29 @@ model Location {
   branchStock BranchStock[]
   branchStockMovements BranchStockMovement[]
   sales       Sale[]
+  invoiceSeries InvoiceSeries[]
+  returns     SaleReturn[]
 
   @@index([orgId, type])
+}
+
+/// Per-branch, per-financial-year invoice counter. Indian practice is a
+/// separate series per place of business that restarts each FY (1 Apr–31 Mar),
+/// so GST returns can be filed series by series. One row per branch per FY;
+/// `seq` is incremented atomically inside the sale transaction.
+model InvoiceSeries {
+  id       String   @id @default(cuid())
+  orgId    String
+  org      Org      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  branchId String
+  branch   Location @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  /// Financial year label, e.g. "25-26".
+  fy       String
+  prefix   String
+  seq      Int      @default(0)
+
+  @@unique([branchId, fy])
+  @@index([orgId])
 }
 
 model User {
@@ -152,6 +178,13 @@ model Product {
   minStock Int     @default(0)
   active   Boolean @default(true)
   imageUrl String?
+  /// Manufacturer barcode (EAN/UPC) as printed on the pack — what a counter
+  /// scanner actually reads. Distinct from `sku`, which is our internal code.
+  barcode  String?
+  /// Bin/rack the product sits in inside the WAREHOUSE, e.g. "R3-B02". Used to
+  /// sort the picking list. The salon's own shelf location is per-branch and
+  /// lives on BranchStock.rackId instead.
+  binLocation String?
   /// Price the branch pays the warehouse (procurement cost), minor units.
   /// Doubles as the salon's cost basis when computing retail margin.
   priceCents Int   @default(0)
@@ -171,8 +204,11 @@ model Product {
   branchStock BranchStock[]
   branchStockMovements BranchStockMovement[]
   saleItems  SaleItem[]
+  returnItems SaleReturnItem[]
 
   @@unique([orgId, sku])
+  /// Nullable, so products without a barcode simply don't participate.
+  @@unique([orgId, barcode])
   @@index([orgId, active, category])
 }
 
@@ -213,7 +249,11 @@ enum OrderStatus {
 
 enum SaleStatus {
   COMPLETED
-  /// The bill was cancelled; its stock was returned to the branch shelf.
+  /// Some units came back against the bill; the rest stand.
+  PARTIALLY_RETURNED
+  /// Every unit on the bill came back.
+  RETURNED
+  /// The bill was cancelled as an error; its stock was returned to the shelf.
   VOID
 }
 
@@ -282,17 +322,29 @@ model Sale {
   org           Org         @relation(fields: [orgId], references: [id], onDelete: Cascade)
   branchId      String
   branch        Location    @relation(fields: [branchId], references: [id])
+  /// Sequence number within this branch+FY series.
   invoiceNo     Int
+  /// The number as printed, e.g. "ROS/25-26/0001". Unique per org.
+  invoiceCode   String
+  /// Financial year the invoice belongs to, e.g. "25-26".
+  fy            String
   soldByUserId  String
   customerName  String?
   customerPhone String?
+  /// Buyer's GSTIN on a B2B sale, so they can claim input tax credit.
+  buyerGstin    String?
   status        SaleStatus  @default(COMPLETED)
   paymentMode   PaymentMode @default(CASH)
-  /// Sum of line taxable values (pre-GST), minor units.
+  /// Sum of line taxable values AFTER discount (pre-GST), minor units.
   subtotalCents Int         @default(0)
+  /// Total discount given across all lines (pre-GST), minor units.
+  discountCents Int         @default(0)
   /// Total GST across all lines (CGST + SGST), minor units.
   taxCents      Int         @default(0)
-  /// subtotalCents + taxCents, minor units — what the customer pays.
+  /// Signed adjustment (−49..+50 paise) that brings the bill to a whole rupee,
+  /// as is conventional on Indian invoices.
+  roundOffCents Int         @default(0)
+  /// subtotal + tax + roundOff, minor units — what the customer pays.
   totalCents    Int         @default(0)
   /// Sum of procurement cost of the units sold, minor units — for margin.
   costCents     Int         @default(0)
@@ -300,11 +352,62 @@ model Sale {
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
 
-  items SaleItem[]
+  items   SaleItem[]
+  returns SaleReturn[]
 
-  @@unique([orgId, invoiceNo])
+  @@unique([orgId, invoiceCode])
   @@index([orgId, branchId, createdAt])
   @@index([orgId, status])
+}
+
+/// A customer bringing goods back against a bill. Unlike a void (which cancels
+/// the whole bill as an error), a return is partial-by-default and keeps the
+/// original invoice intact — the returned units go back on the shelf and a
+/// credit note is raised for the refunded value.
+model SaleReturn {
+  id            String      @id @default(cuid())
+  orgId         String
+  org           Org         @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  branchId      String
+  branch        Location    @relation(fields: [branchId], references: [id])
+  saleId        String
+  sale          Sale        @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  /// Credit-note number, e.g. "CN/ROS/25-26/0003".
+  creditNoteCode String
+  reason        String
+  note          String?
+  /// How the money went back to the customer.
+  refundMode    PaymentMode @default(CASH)
+  subtotalCents Int         @default(0)
+  taxCents      Int         @default(0)
+  totalCents    Int         @default(0)
+  createdByUserId String
+  createdAt     DateTime    @default(now())
+
+  items SaleReturnItem[]
+
+  @@unique([orgId, creditNoteCode])
+  @@index([orgId, branchId, createdAt])
+  @@index([saleId])
+}
+
+model SaleReturnItem {
+  id             String     @id @default(cuid())
+  returnId       String
+  saleReturn     SaleReturn @relation(fields: [returnId], references: [id], onDelete: Cascade)
+  /// The bill line being returned against.
+  saleItemId     String
+  saleItem       SaleItem   @relation(fields: [saleItemId], references: [id])
+  productId      String
+  product        Product    @relation(fields: [productId], references: [id])
+  qty            Int
+  /// Value refunded for this line, mirroring the original line's maths.
+  lineNetCents   Int
+  taxCents       Int
+  lineTotalCents Int
+
+  @@index([returnId])
+  @@index([saleItemId])
 }
 
 model SaleItem {
@@ -320,7 +423,10 @@ model SaleItem {
   /// Retail unit price, exclusive of GST, minor units.
   unitPriceCents Int
   gstRate        Int
-  /// qty × unitPriceCents — the taxable value of this line, minor units.
+  /// Discount given on this line, pre-GST, minor units. Indian GST is charged
+  /// on the discounted value, so this reduces the taxable amount.
+  discountCents  Int     @default(0)
+  /// (qty × unitPriceCents) − discountCents — the taxable value, minor units.
   lineNetCents   Int
   /// GST on this line (CGST + SGST together), minor units.
   taxCents       Int
@@ -328,6 +434,10 @@ model SaleItem {
   lineTotalCents Int
   /// Procurement unit cost snapshot, minor units — for margin reporting.
   unitCostCents  Int     @default(0)
+  /// Units the customer has brought back against this line.
+  returnedQty    Int     @default(0)
+
+  returnItems SaleReturnItem[]
 
   @@index([saleId])
   @@index([productId])

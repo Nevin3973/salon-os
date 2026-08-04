@@ -54,6 +54,7 @@ jobs:
           npx prisma db push --skip-generate
           npx prisma db execute --schema prisma/schema.prisma --file prisma/migrations/20260719000001_rls/migration.sql
           npx prisma db execute --schema prisma/schema.prisma --file prisma/migrations/20260727000001_sales_rls/migration.sql
+          npx prisma db execute --schema prisma/schema.prisma --file prisma/migrations/20260728000001_retail_parity_rls/migration.sql
           npx prisma db execute --schema prisma/schema.prisma --file scripts/provision-app-role.sql
           npx tsx prisma/seed.ts
 

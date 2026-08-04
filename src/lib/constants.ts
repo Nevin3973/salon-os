@@ -33,6 +33,19 @@ export const PAYMENT_MODE_LABEL: Record<PaymentModeValue, string> = {
   UPI: "UPI",
 };
 
+// Why a customer brought goods back. A return is partial by default and raises
+// a credit note; the original invoice stays intact.
+export const SALE_RETURN_REASONS = [
+  "Customer changed mind",
+  "Wrong product",
+  "Damaged or defective",
+  "Allergic reaction",
+  "Expired or short-dated",
+  "Other",
+] as const;
+
+export type SaleReturnReason = (typeof SALE_RETURN_REASONS)[number];
+
 // Why a customer bill was voided; voiding returns its units to the shelf.
 export const VOID_SALE_REASONS = [
   "Billing error",

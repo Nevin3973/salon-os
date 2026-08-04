@@ -1,5 +1,64 @@
 # Deploying & operating Salon OS
 
+## Hosting: nothing here is tied to Neon or Vercel
+
+The app talks to **plain PostgreSQL 14+ over a standard connection string**. There
+is no Neon driver, no Vercel SDK, no serverless-only API — `grep -ri neon src/`
+returns a single code comment. Moving hosts means changing two environment
+variables, nothing else.
+
+| Where you host | What to set |
+|---|---|
+| **Supabase / Railway / Render** | `DATABASE_URL` = pooled URL, `DIRECT_URL` = direct URL |
+| **AWS RDS / Azure / Cloud SQL** | Both to the same instance (add PgBouncer later if needed) |
+| **Your own server / Docker** | Both to `postgresql://user:pass@host:5432/db` |
+
+The app itself runs anywhere Node 20 does: `npm run build && npm start` behind a
+reverse proxy, or the included `Dockerfile` (`npm run docker:build`). Off Vercel,
+set `AUTH_URL` to the public origin and keep `AUTH_SECRET` stable across restarts.
+
+**Whatever host you pick, do these two things:**
+1. Run `scripts/provision-app-role.sql` as the DB owner to create the restricted
+   `salonos_app` role, and point `DATABASE_URL` at it. The tenant wall depends on
+   the app *not* connecting as the owner.
+2. Apply the schema and every RLS migration (see *Common commands*).
+
+## Starting a real customer — no demo data
+
+`prisma/seed.ts` invents fictional salons and is for development and CI only.
+**Never run it against a customer's database.** To start a live workspace:
+
+```bash
+npm run org:bootstrap -- \
+  --org "Bloom Salon Group" --gstin 29ABCDE1234F1Z5 \
+  --admin-name "Priya Nair" --admin-email priya@bloomsalon.in \
+  --warehouse "Central Store" --branch "Indiranagar" --branch "Koramangala"
+```
+
+That creates the org, its warehouse, its branches (each with an invoice prefix and
+a purchase authorization code) and one Super Admin — and nothing else. It prints
+the admin's one-time password and the branch codes **once**; they are stored hashed
+and cannot be recovered. The admin then adds staff under **Team**, and products and
+prices under **Products**.
+
+To clear demo workspaces out of a database that already has them:
+
+```bash
+npm run demo:purge            # dry run — shows exactly what would go
+npm run demo:purge -- --yes   # actually removes them
+```
+
+## Handing figures to an accountant
+
+- **Tally** — `/api/exports/tally?from=&to=` produces a Tally Prime/ERP 9 voucher
+  XML (sales + credit notes, with CGST/SGST and round-off ledgers) that imports
+  directly. Tally matches **ledger and company names**, so confirm the client's
+  chart of accounts uses `Cash`, `Card Receipts`, `UPI Receipts`, `Sales Accounts`,
+  `CGST`, `SGST`, `Round Off` — or pass `?company=` and adjust `DEFAULT_LEDGERS`
+  in `src/lib/tally.ts` to match theirs. Every voucher is balanced before it ships.
+- **GSTR-1** — `/api/exports/hsn` gives the HSN-wise summary table, net of returns.
+- Both are on **Salon → Sales report**, alongside the raw CSV.
+
 ## Environments
 
 | Lane | Git branch | Vercel | Database |

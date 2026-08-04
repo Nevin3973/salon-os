@@ -13,7 +13,7 @@ export default async function QueuePage() {
       branch: { select: { name: true } },
       items: {
         include: {
-          product: { select: { name: true, brand: true, unit: true, stock: true } },
+          product: { select: { name: true, brand: true, unit: true, stock: true, binLocation: true } },
           deliveries: { orderBy: { createdAt: "asc" }, select: { qty: true, createdAt: true } },
         },
       },
@@ -36,17 +36,27 @@ export default async function QueuePage() {
     placedBy: nameOf.get(o.placedByUserId) ?? "—",
     createdAt: o.createdAt.toISOString(),
     status: o.status as "PENDING" | "PROCESSING",
-    items: o.items.map((it) => ({
-      id: it.id,
-      name: it.product.name,
-      brand: it.product.brand,
-      unit: it.product.unit,
-      requestedQty: it.requestedQty,
-      deliveredQty: it.deliveredQty,
-      stock: it.product.stock,
-      note: it.note,
-      deliveries: it.deliveries.map((d) => ({ qty: d.qty, at: d.createdAt.toISOString() })),
-    })),
+    // Sorted by bin so the picker walks the aisles once, in order; anything
+    // without a bin sinks to the bottom of the list.
+    items: o.items
+      .map((it) => ({
+        id: it.id,
+        name: it.product.name,
+        brand: it.product.brand,
+        unit: it.product.unit,
+        requestedQty: it.requestedQty,
+        deliveredQty: it.deliveredQty,
+        stock: it.product.stock,
+        binLocation: it.product.binLocation,
+        note: it.note,
+        deliveries: it.deliveries.map((d) => ({ qty: d.qty, at: d.createdAt.toISOString() })),
+      }))
+      .sort((a, b) => {
+        if (!a.binLocation && !b.binLocation) return a.name.localeCompare(b.name);
+        if (!a.binLocation) return 1;
+        if (!b.binLocation) return -1;
+        return a.binLocation.localeCompare(b.binLocation, undefined, { numeric: true });
+      }),
   }));
 
   const pending = queue.filter((o) => o.status === "PENDING").length;

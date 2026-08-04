@@ -2,7 +2,13 @@ import { PrismaClient, LocationType, Role } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { productImageUrl } from "../src/lib/product-image";
 import { seedPriceMinor } from "../src/lib/seed-pricing";
-import { lineGst } from "../src/lib/gst";
+import {
+  lineGst,
+  billTotals,
+  financialYear,
+  formatInvoiceCode,
+  defaultPrefix,
+} from "../src/lib/gst";
 
 /** GST rate a category is billed at (whole percent). Cosmetics/salon goods are
  *  mostly 18%; a few staples sit lower. */
@@ -53,6 +59,25 @@ function rackFor(category: string, branchId: string, productId: string): string 
   const aisle = String.fromCharCode(65 + Math.floor(hash(`aisle:${category}`) * 8)); // A–H
   const slot = 1 + Math.floor(hash(`${branchId}:${productId}`) * 40); // 1–40
   return `${aisle}-${String(slot).padStart(2, "0")}`;
+}
+
+/** Warehouse bin like "R3-B02" — a rack row and bay, stable per SKU. */
+function binFor(sku: string): string {
+  const row = 1 + Math.floor(hash(`row:${sku}`) * 6); // R1–R6
+  const bay = 1 + Math.floor(hash(`bay:${sku}`) * 12); // B01–B12
+  return `R${row}-B${String(bay).padStart(2, "0")}`;
+}
+
+/**
+ * A valid-looking EAN-13 for demo scanning: a fixed prefix, a SKU-derived body,
+ * and the real mod-10 check digit so scanners and validators accept it.
+ */
+function eanFor(sku: string): string {
+  let body = "890" + String(Math.floor(hash(`ean:${sku}`) * 1e9)).padStart(9, "0").slice(0, 9);
+  body = body.slice(0, 12);
+  let sum = 0;
+  for (let i = 0; i < 12; i++) sum += Number(body[i]) * (i % 2 === 0 ? 1 : 3);
+  return body + String((10 - (sum % 10)) % 10);
 }
 
 // The seed writes without an org context, so it must use the owner
@@ -197,7 +222,12 @@ async function seedOrg(opts: {
   for (const name of opts.branchNames) {
     branches.push(
       await prisma.location.create({
-        data: { orgId: org.id, type: LocationType.BRANCH, name },
+        data: {
+          orgId: org.id,
+          type: LocationType.BRANCH,
+          name,
+          invoicePrefix: defaultPrefix(name),
+        },
       })
     );
   }
@@ -217,6 +247,8 @@ async function seedOrg(opts: {
           retailPriceCents: retailPriceMinor(priceCents),
           gstRate: categoryGst(p.category),
           hsn: categoryHsn(p.category),
+          barcode: eanFor(`${opts.slug}:${p.sku}`),
+          binLocation: binFor(p.sku),
         },
       });
     })
@@ -520,6 +552,10 @@ async function seedBranchStockAndSales(ctx: SeededOrg) {
       });
     }
 
+    // Each branch runs its own invoice series, restarting at 1.
+    const prefix = defaultPrefix(branch.name);
+    let branchSeq = 0;
+
     // A spread of sample bills over the last ~12 days.
     const billCount = 8 + Math.floor(hash(`bills:${branch.id}`) * 6); // 8..13
     for (let s = 0; s < billCount; s++) {
@@ -538,26 +574,45 @@ async function seedBranchStockAndSales(ctx: SeededOrg) {
       if (chosen.length === 0) continue;
 
       saleNo++;
+      branchSeq++;
       const createdAt = daysAgoDate(daysAgo, 12 + (s % 6), (s * 13) % 60);
-      const items = chosen.map(({ p, qty }) => {
-        const g = lineGst(p.retailPriceCents, qty, p.gstRate);
+      const items = chosen.map(({ p, qty }, li) => {
+        // Give roughly one line in six a small discount, so the demo shows one.
+        const gross = p.retailPriceCents * qty;
+        const discountCents =
+          hash(`${branch.id}:disc:${s}:${li}`) < 0.16 ? Math.round(gross * 0.1 / 100) * 100 : 0;
+        const g = lineGst(p.retailPriceCents, qty, p.gstRate, discountCents);
         return {
           productId: p.id, name: p.name, hsn: p.hsn, qty,
-          unitPriceCents: p.retailPriceCents, gstRate: p.gstRate,
+          unitPriceCents: p.retailPriceCents, gstRate: p.gstRate, discountCents,
           lineNetCents: g.netCents, taxCents: g.taxCents, lineTotalCents: g.totalCents,
           unitCostCents: p.priceCents,
         };
       });
-      const subtotalCents = items.reduce((n, it) => n + it.lineNetCents, 0);
-      const taxCents = items.reduce((n, it) => n + it.taxCents, 0);
+      const totals = billTotals(
+        items.map((it) => ({
+          unitPriceCents: it.unitPriceCents, qty: it.qty, gstRate: it.gstRate,
+          discountCents: it.discountCents,
+        }))
+      );
       const costCents = items.reduce((n, it) => n + it.unitCostCents * it.qty, 0);
+      const fy = financialYear(createdAt);
 
       const sale = await prisma.sale.create({
         data: {
-          orgId: ctx.org.id, branchId: branch.id, invoiceNo: saleNo, soldByUserId: pm.id,
+          orgId: ctx.org.id, branchId: branch.id,
+          invoiceNo: branchSeq,
+          invoiceCode: formatInvoiceCode(prefix, fy, branchSeq),
+          fy,
+          soldByUserId: pm.id,
           customerName: SAMPLE_CUSTOMERS[Math.floor(hash(`${branch.id}:cust:${s}`) * SAMPLE_CUSTOMERS.length)],
           paymentMode: paymentModes[s % 3],
-          subtotalCents, taxCents, totalCents: subtotalCents + taxCents, costCents,
+          subtotalCents: totals.subtotalCents,
+          discountCents: totals.discountCents,
+          taxCents: totals.taxCents,
+          roundOffCents: totals.roundOffCents,
+          totalCents: totals.totalCents,
+          costCents,
           createdAt,
           items: { create: items },
         },
@@ -583,6 +638,20 @@ async function seedBranchStockAndSales(ctx: SeededOrg) {
         data: { onHand },
       });
     }
+
+    // Record where each branch's series got to, so live sales carry on from
+    // there instead of restarting at 1.
+    if (branchSeq > 0) {
+      await prisma.invoiceSeries.create({
+        data: {
+          orgId: ctx.org.id,
+          branchId: branch.id,
+          fy: financialYear(),
+          prefix,
+          seq: branchSeq,
+        },
+      });
+    }
   }
 
   await prisma.org.update({ where: { id: ctx.org.id }, data: { saleSeq: saleNo } });
@@ -591,6 +660,9 @@ async function seedBranchStockAndSales(ctx: SeededOrg) {
 
 async function reset() {
   // Dev-only: clear all rows so the seed is re-runnable. Order matters for FKs.
+  await prisma.saleReturnItem.deleteMany();
+  await prisma.saleReturn.deleteMany();
+  await prisma.invoiceSeries.deleteMany();
   await prisma.saleItem.deleteMany();
   await prisma.sale.deleteMany();
   await prisma.branchStockMovement.deleteMany();
@@ -616,6 +688,7 @@ const TENANT_TABLES = [
   "Location", "Product", "StockMovement", "Order", "CartItem", "AuthorizationCode",
   "AuditLogEntry", "Address", "OrderItem", "OrderItemDelivery",
   "BranchStock", "BranchStockMovement", "Sale", "SaleItem",
+  "InvoiceSeries", "SaleReturn", "SaleReturnItem",
 ] as const;
 
 /**

@@ -18,6 +18,7 @@ export default async function SellPage() {
     .map((s) => ({
       productId: s.productId,
       sku: s.product.sku,
+      barcode: s.product.barcode,
       name: s.product.name,
       brand: s.product.brand,
       unit: s.product.unit,

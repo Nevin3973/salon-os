@@ -12,6 +12,8 @@
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate deploy",
     "db:seed": "tsx prisma/seed.ts",
+    "org:bootstrap": "tsx scripts/bootstrap-org.ts",
+    "demo:purge": "tsx scripts/purge-demo.ts",
     "docker:build": "docker build -t salon-os .",
     "docker:run": "docker run -p 3000:3000 salon-os",
     "postinstall": "prisma generate"
