@@ -21,7 +21,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         // 5 tries per 10 minutes per account, then wait it out.
         // (Failed attempts count; a success clears the counter.)
-        const limiter = takeToken(`login:${email}`, { limit: 5, windowMs: 10 * 60 * 1000 });
+        const limiter = await takeToken(`login:${email}`, { limit: 5, windowMs: 10 * 60 * 1000 });
         if (!limiter.ok) return null;
 
         const user = await prisma.user.findUnique({
@@ -37,7 +37,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const valid = await bcrypt.compare(password, user.passwordHash);
         if (!valid) return null;
 
-        resetTokens(`login:${email}`);
+        await resetTokens(`login:${email}`);
 
         const memberships: MembershipSummary[] = user.memberships.map((m) => ({
           orgId: m.orgId,

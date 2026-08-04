@@ -8,6 +8,7 @@ import { requireVerifiedSession, setOrgConfig, withOrg } from "@/lib/tenant";
 import { logAudit } from "@/lib/audit";
 import { verifyAuthCode } from "@/lib/authcode";
 import { bumpBranchStock } from "@/lib/branch-stock";
+import { reportError } from "@/lib/observability";
 import {
   lineGst,
   billTotals,
@@ -660,5 +661,11 @@ function saleError(e: unknown): SaleResult {
   if (raw === "SALE_VOID") return { ok: false, error: "This bill was voided — there is nothing to return." };
   if (raw === "FULLY_RETURNED") return { ok: false, error: "Everything on this bill has already come back." };
   if (raw === "NOTHING_TO_RETURN") return { ok: false, error: "Enter how many units are coming back." };
+
+  // Everything above is a case we anticipated and explained to the cashier.
+  // Reaching here means something genuinely unplanned happened on a path that
+  // moves money or stock, and the counter just saw "please try again" — this is
+  // the one failure nobody would otherwise hear about.
+  reportError(e, { where: "sales" });
   return { ok: false, error: "Something went wrong. Please try again." };
 }

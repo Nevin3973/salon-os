@@ -41,3 +41,6 @@ yarn-error.log*
 next-env.d.ts
 
 /src/generated/prisma
+
+# Database dumps — real sales and customer data. Never commit these.
+/backups/

@@ -18,7 +18,7 @@ export async function verifyAuthCode(
   branchId: string,
   rawCode: string
 ): Promise<{ ok: true; codeId: string } | { ok: false; error: string }> {
-  const limiter = takeToken(`authcode:${session.userId}`, { limit: 10, windowMs: 10 * 60 * 1000 });
+  const limiter = await takeToken(`authcode:${session.userId}`, { limit: 10, windowMs: 10 * 60 * 1000 });
   if (!limiter.ok) {
     return {
       ok: false,
@@ -37,7 +37,7 @@ export async function verifyAuthCode(
   );
   for (const c of codes) {
     if (await bcrypt.compare(rawCode.trim(), c.codeHash)) {
-      resetTokens(`authcode:${session.userId}`);
+      await resetTokens(`authcode:${session.userId}`);
       return { ok: true, codeId: c.id };
     }
   }

@@ -6,6 +6,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { prisma } from "@/lib/db";
 import { sendEmail, appUrl } from "@/lib/email";
 import { takeToken } from "@/lib/rate-limit";
+import { PRODUCT_NAME } from "@/lib/brand";
 
 export type PasswordResult = { ok: true; message: string } | { ok: false; error: string };
 
@@ -45,10 +46,10 @@ export async function sendInviteEmail(input: {
   const token = await issueToken(input.userId, "invite");
   return sendEmail({
     to: input.email,
-    subject: `You've been added to ${input.orgName} on Beyond Demands`,
+    subject: `You have been added to ${input.orgName} on ${PRODUCT_NAME}`,
     heading: `Welcome, ${input.name.split(" ")[0]}`,
     lines: [
-      `You've been given access to ${input.orgName} on Beyond Demands.`,
+      `You have been given access to ${input.orgName} on ${PRODUCT_NAME}.`,
       "Choose your password to activate your account. This link works once and expires in 7 days.",
     ],
     cta: { label: "Set your password", url: `${appUrl()}/reset-password?token=${token}` },
@@ -70,7 +71,7 @@ export async function requestPasswordReset(input: { email: string }): Promise<Pa
   const email = parsed.data.email.toLowerCase();
 
   // 5 requests per 15 minutes per address — stops mailbox flooding.
-  const limiter = takeToken(`pwreset:${email}`, { limit: 5, windowMs: 15 * 60 * 1000 });
+  const limiter = await takeToken(`pwreset:${email}`, { limit: 5, windowMs: 15 * 60 * 1000 });
   if (!limiter.ok) return generic;
 
   const user = await prisma.user.findUnique({ where: { email } });
@@ -79,7 +80,7 @@ export async function requestPasswordReset(input: { email: string }): Promise<Pa
   const token = await issueToken(user.id, "reset");
   await sendEmail({
     to: user.email,
-    subject: "Reset your Beyond Demands password",
+    subject: `Reset your ${PRODUCT_NAME} password`,
     heading: "Reset your password",
     lines: [
       `Hello ${user.name.split(" ")[0]},`,
