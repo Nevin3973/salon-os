@@ -84,13 +84,15 @@ export default async function InvoicePage({
       {/* The printable invoice */}
       <div className="print-block bg-surface border border-line rounded-xl p-6 sm:p-8">
         <div className="flex items-start justify-between gap-4 flex-wrap">
-          <div>
+          {/* On a roll these stack full-width and centre, the way a till receipt
+              conventionally reads. On A4 they stay as a two-column letterhead. */}
+          <div className="receipt-center">
             <div className="font-display text-xl font-bold">{sellerName}</div>
             <div className="text-xs text-muted mt-1">{sale.branch.name}</div>
             {addressLine && <div className="text-xs text-faint mt-0.5 max-w-xs">{addressLine}</div>}
             {org?.gstin && <div className="text-xs text-faint mt-0.5">GSTIN: {org.gstin}</div>}
           </div>
-          <div className="text-right">
+          <div className="receipt-center text-right">
             <div className="text-[11px] uppercase tracking-[0.18em] text-faint font-semibold">Tax Invoice</div>
             <div className="font-semibold text-lg mt-0.5">{sale.invoiceCode}</div>
             <div className="text-xs text-faint mt-0.5">{fmtDateTime(sale.createdAt)}</div>
@@ -111,13 +113,15 @@ export default async function InvoicePage({
           <table className="w-full text-sm border-collapse">
             <thead>
               <tr className="text-left text-[11px] uppercase tracking-wider text-faint border-b border-line">
+                {/* On a 58/80mm roll only Item, Qty and Amount fit; the rest
+                    are `a4-only` and drop out of the receipt layout. */}
                 <th className="py-2 pr-2 font-medium">Item</th>
-                <th className="py-2 px-2 font-medium">HSN</th>
+                <th className="a4-only py-2 px-2 font-medium">HSN</th>
                 <th className="py-2 px-2 font-medium text-right">Qty</th>
-                <th className="py-2 px-2 font-medium text-right">Rate</th>
-                <th className="py-2 px-2 font-medium text-right">Disc.</th>
-                <th className="py-2 px-2 font-medium text-right">Taxable</th>
-                <th className="py-2 px-2 font-medium text-right">GST</th>
+                <th className="a4-only py-2 px-2 font-medium text-right">Rate</th>
+                <th className="a4-only py-2 px-2 font-medium text-right">Disc.</th>
+                <th className="a4-only py-2 px-2 font-medium text-right">Taxable</th>
+                <th className="a4-only py-2 px-2 font-medium text-right">GST</th>
                 <th className="py-2 pl-2 font-medium text-right">Amount</th>
               </tr>
             </thead>
@@ -132,14 +136,14 @@ export default async function InvoicePage({
                         <span className="text-out text-xs"> · {it.returnedQty} returned</span>
                       )}
                     </td>
-                    <td className="py-2 px-2 text-faint text-xs">{it.hsn ?? "—"}</td>
+                    <td className="a4-only py-2 px-2 text-faint text-xs">{it.hsn ?? "—"}</td>
                     <td className="py-2 px-2 text-right tabular-nums">{it.qty}</td>
-                    <td className="py-2 px-2 text-right tabular-nums">{formatMoney(it.unitPriceCents)}</td>
-                    <td className="py-2 px-2 text-right tabular-nums">
+                    <td className="a4-only py-2 px-2 text-right tabular-nums">{formatMoney(it.unitPriceCents)}</td>
+                    <td className="a4-only py-2 px-2 text-right tabular-nums">
                       {it.discountCents > 0 ? formatMoney(it.discountCents) : <span className="text-faint">—</span>}
                     </td>
-                    <td className="py-2 px-2 text-right tabular-nums">{formatMoney(g.netCents)}</td>
-                    <td className="py-2 px-2 text-right tabular-nums">
+                    <td className="a4-only py-2 px-2 text-right tabular-nums">{formatMoney(g.netCents)}</td>
+                    <td className="a4-only py-2 px-2 text-right tabular-nums">
                       {formatMoney(g.taxCents)}
                       <span className="text-faint text-xs"> ({it.gstRate}%)</span>
                     </td>
@@ -152,8 +156,10 @@ export default async function InvoicePage({
         </div>
 
         <div className="flex flex-col sm:flex-row justify-between gap-5 mt-5">
-          {/* GST summary by rate — intra-state, split CGST + SGST. */}
-          <div className="text-xs">
+          {/* GST summary by rate — intra-state, split CGST + SGST. Four numeric
+              columns will not fit a roll, and the customer copy does not need
+              them; the totals below carry the tax figure that matters. */}
+          <div className="a4-only text-xs">
             <div className="text-[11px] uppercase tracking-wider text-faint font-semibold mb-1.5">GST summary</div>
             <table className="border-collapse">
               <thead>
@@ -237,8 +243,8 @@ export default async function InvoicePage({
           </div>
         )}
 
-        <div className="text-[11px] text-faint mt-6 pt-4 border-t border-line">
-          Sold by {seller?.name ?? "—"} · {sellerName} · Powered by Beyond Demands
+        <div className="receipt-center text-[11px] text-faint mt-6 pt-4 border-t border-line">
+          Sold by {seller?.name ?? "—"} · {sellerName} · Powered by Salon OS from Beyond Demands
         </div>
       </div>
     </div>

@@ -401,3 +401,63 @@ textarea:focus-visible {
     grid-column: 1 / -1;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════
+   THERMAL RECEIPTS — 58mm / 80mm counter printers
+   A4 stays the default (that is the GST tax invoice). Adding
+   `receipt-58` or `receipt-80` to <html> before printing
+   switches the page to roll-paper: narrow page box, no
+   margins, mono type, and the wide A4-only blocks hidden.
+   Roll paper has no fixed page length, so height is auto.
+   ═══════════════════════════════════════════════════════════ */
+
+@media print {
+  html.receipt-58 { --receipt-width: 58mm; }
+  html.receipt-80 { --receipt-width: 80mm; }
+
+  html.receipt-58 body,
+  html.receipt-80 body {
+    width: var(--receipt-width);
+    margin: 0;
+    padding: 0;
+    font-family: ui-monospace, "Courier New", monospace;
+    font-size: 11px;
+    line-height: 1.35;
+    color: #000;
+  }
+
+  /* Thermal printers cannot render greys or borders reliably. */
+  html.receipt-58 .print-block,
+  html.receipt-80 .print-block {
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    padding: 2mm !important;
+    margin: 0 !important;
+    background: #fff !important;
+  }
+
+  /* Blocks that only make sense on a full-width page. */
+  html.receipt-58 .a4-only,
+  html.receipt-80 .a4-only { display: none !important; }
+
+  html.receipt-58 table,
+  html.receipt-80 table { width: 100%; font-size: 10px; }
+
+  html.receipt-58 th,
+  html.receipt-80 th,
+  html.receipt-58 td,
+  html.receipt-80 td { padding: 0.6mm 0 !important; }
+
+  /* The centred header/footer lines a receipt conventionally has. */
+  html.receipt-58 .receipt-center,
+  html.receipt-80 .receipt-center { text-align: center !important; }
+}
+
+/* NOTE: there is deliberately no `@page` rule here.
+   `@page` cannot be scoped by a class, so anything written at this level would
+   apply to A4 invoices too — an earlier version set `size: A4; margin: 12mm`
+   and silently changed the tax invoice's margin from 14mm while still forcing
+   an A4 page box onto 58mm rolls. The A4 page box lives in the print block
+   above; the roll page box is injected at print time by the print menu, which
+   is the only way to vary it per print. */

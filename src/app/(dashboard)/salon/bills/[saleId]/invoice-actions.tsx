@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { voidSale, returnSaleItems } from "@/lib/actions/sales";
 import {
@@ -17,6 +17,125 @@ export type ReturnableLine = {
   qty: number;
   returnedQty: number;
 };
+
+/** Paper the counter can print on. A4 is the GST tax invoice; the rest are rolls. */
+const PAPER = [
+  { id: "a4", label: "A4 invoice", hint: "Tax invoice for the customer's records" },
+  { id: "80", label: "80mm receipt", hint: "Standard counter roll" },
+  { id: "58", label: "58mm receipt", hint: "Narrow handheld roll" },
+] as const;
+
+type PaperId = (typeof PAPER)[number]["id"];
+const PAPER_PREF_KEY = "salonos:paper";
+
+/**
+ * Print control offering A4 or a thermal roll.
+ *
+ * A branch prints to the same printer all day, so the last choice is remembered
+ * and becomes the one-click default — the dropdown is only there for the
+ * occasional customer who wants the full A4 tax invoice.
+ *
+ * Roll sizes work by putting a class on <html> that the print stylesheet keys
+ * off (see globals.css). It is removed again on `afterprint` so the on-screen
+ * page is never left in receipt mode — including when the user cancels the
+ * print dialog, which still fires the event.
+ */
+function PrintMenu() {
+  const [paper, setPaper] = useState<PaperId>("a4");
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(PAPER_PREF_KEY);
+      if (saved && PAPER.some((p) => p.id === saved)) setPaper(saved as PaperId);
+    } catch {
+      /* private mode — the A4 default is fine */
+    }
+  }, []);
+
+  function print(choice: PaperId) {
+    setOpen(false);
+    setPaper(choice);
+    try {
+      localStorage.setItem(PAPER_PREF_KEY, choice);
+    } catch {
+      /* ignore */
+    }
+
+    const root = document.documentElement;
+    const cls = choice === "a4" ? null : `receipt-${choice}`;
+
+    // `@page` cannot be scoped by a class, so the roll's page box has to be
+    // injected for the duration of the print and pulled out afterwards. Without
+    // it the browser keeps the A4 page box from globals.css and prints a 58mm
+    // column down the left of an A4 sheet. `auto` height because roll paper has
+    // no fixed page length.
+    let pageStyle: HTMLStyleElement | null = null;
+    if (cls) {
+      root.classList.add(cls);
+      pageStyle = document.createElement("style");
+      pageStyle.setAttribute("data-receipt-page", choice);
+      pageStyle.textContent = `@page { size: ${choice}mm auto; margin: 0; }`;
+      document.head.appendChild(pageStyle);
+    }
+
+    const cleanup = () => {
+      if (cls) root.classList.remove(cls);
+      pageStyle?.remove();
+      pageStyle = null;
+      window.removeEventListener("afterprint", cleanup);
+    };
+    // `afterprint` covers both completing and cancelling the dialog. There is
+    // deliberately no timer fallback: an earlier version tore the styles down
+    // after 3s, which fired while the dialog was still open — changing any
+    // setting re-rendered the preview as A4 and sent that to the roll printer.
+    window.addEventListener("afterprint", cleanup);
+
+    window.print();
+  }
+
+  const current = PAPER.find((p) => p.id === paper) ?? PAPER[0];
+
+  return (
+    <div className="no-print relative flex items-stretch">
+      <button
+        onClick={() => print(paper)}
+        className="h-9 pl-4 pr-3 rounded-l-lg border border-line text-xs font-semibold text-muted hover:text-ink hover:border-velvet/40 transition-colors cursor-pointer"
+      >
+        Print {current.label}
+      </button>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        aria-label="Choose paper size"
+        aria-expanded={open}
+        className="h-9 px-2 rounded-r-lg border border-l-0 border-line text-xs text-muted hover:text-ink hover:border-velvet/40 transition-colors cursor-pointer"
+      >
+        ▾
+      </button>
+
+      {open && (
+        <>
+          {/* Click-away catcher. */}
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 top-10 z-20 w-60 bg-surface border border-line rounded-xl p-1 shadow-lg text-left">
+            {PAPER.map((p) => (
+              <button
+                key={p.id}
+                onClick={() => print(p.id)}
+                className={`w-full text-left px-3 py-2 rounded-lg hover:bg-bg cursor-pointer ${
+                  p.id === paper ? "text-velvet" : "text-ink"
+                }`}
+              >
+                <div className="text-xs font-semibold">{p.label}</div>
+                <div className="text-[11px] text-faint">{p.hint}</div>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
 
 /**
  * Print, return and void controls for one invoice.
@@ -42,12 +161,7 @@ export function InvoiceActions({
   return (
     <div className="flex flex-col items-end gap-2">
       <div className="flex items-center gap-2">
-        <button
-          onClick={() => window.print()}
-          className="h-9 px-4 rounded-lg border border-line text-xs font-semibold text-muted hover:text-ink hover:border-velvet/40 transition-colors cursor-pointer"
-        >
-          Print / Save PDF
-        </button>
+        <PrintMenu />
 
         {canReturn && panel !== "return" && (
           <button
