@@ -4,10 +4,48 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/db";
-import { requireSession, requireScopedSession, withOrg } from "@/lib/tenant";
+import { requireSession, requireVerifiedSession, requireScopedSession, withOrg } from "@/lib/tenant";
 import { logAudit } from "@/lib/audit";
+import { takeToken, resetTokens } from "@/lib/rate-limit";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
+
+/**
+ * Re-checks the signed-in person's own password. Used to release the till lock
+ * after an idle period, without ending and re-establishing the session (which
+ * would lose an in-progress bill).
+ *
+ * Rate-limited per user so the lock screen can't be used to guess a password,
+ * and it deliberately reveals nothing beyond right/wrong.
+ *
+ * Re-checks the live membership rather than trusting the token: the whole point
+ * of the lock is that time has passed and the device was unattended, so it is
+ * exactly the moment an account revoked mid-shift should stop working — not
+ * later, at the next action that happens to move money.
+ */
+export async function verifyOwnPassword(input: { password: string }): Promise<ActionResult> {
+  const parsed = z.object({ password: z.string().min(1).max(200) }).safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Enter your password." };
+  const session = await requireVerifiedSession();
+
+  const limiter = await takeToken(`unlock:${session.userId}`, { limit: 10, windowMs: 5 * 60 * 1000 });
+  if (!limiter.ok) {
+    return {
+      ok: false,
+      error: `Too many tries. Wait about ${Math.max(1, Math.ceil(limiter.retryAfterSec / 60))} minute(s).`,
+    };
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: session.userId },
+    select: { passwordHash: true },
+  });
+  if (!user || !(await bcrypt.compare(parsed.data.password, user.passwordHash))) {
+    return { ok: false, error: "That password doesn't match." };
+  }
+  await resetTokens(`unlock:${session.userId}`);
+  return { ok: true };
+}
 
 // ————— Profile —————
 

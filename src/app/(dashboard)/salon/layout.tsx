@@ -1,5 +1,6 @@
 import { requireScopedSession, activeOrgName, activeLocationName } from "@/lib/tenant";
 import { OpsShell } from "@/components/ops-shell";
+import { TillLock, LOCKABLE_ID } from "@/components/till-lock";
 
 /**
  * The salon-manager's operational console — the "selling" side, kept separate
@@ -27,15 +28,21 @@ export default async function SalonLayout({ children }: { children: React.ReactN
 
   return (
     <div className="bg-bg text-ink min-h-screen">
-      <OpsShell
-        brand="Beyond Demands"
-        subtitle={isManager ? (branchName ?? "Salon") : `${branchName ?? "Salon"} · Counter`}
-        userName={session.name}
-        orgName={orgName}
-        items={items}
-      >
-        {children}
-      </OpsShell>
+      {/* Wrapped so the till lock can make the whole console inert — covering
+          it is not enough; it must also leave the tab order. */}
+      <div id={LOCKABLE_ID}>
+        <OpsShell
+          brand="Salon OS"
+          subtitle={isManager ? (branchName ?? "Salon") : `${branchName ?? "Salon"} · Counter`}
+          userName={session.name}
+          orgName={orgName}
+          items={items}
+        >
+          {children}
+        </OpsShell>
+      </div>
+      {/* The counter is often a shared device left unattended between customers. */}
+      <TillLock userName={session.name} idleMinutes={5} />
     </div>
   );
 }

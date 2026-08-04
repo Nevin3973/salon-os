@@ -24,6 +24,19 @@ export const authConfig: NextAuthConfig = {
   },
   session: {
     strategy: "jwt",
+    /**
+     * A working day, not NextAuth's 30-day default. These accounts move money
+     * and often live on a shared counter device, so a token left behind on a
+     * borrowed machine expires the same day rather than next month.
+     *
+     * `updateAge` re-issues the token hourly while someone is actually working,
+     * so an active shift is never interrupted. The token only carries routing
+     * claims: anything that moves money re-checks the live membership on the
+     * server (`requireVerifiedSession`), so a revoked account stops working
+     * immediately regardless of what its token still says.
+     */
+    maxAge: 12 * 60 * 60,
+    updateAge: 60 * 60,
   },
   providers: [],
   callbacks: {
@@ -76,6 +89,9 @@ export const authConfig: NextAuthConfig = {
         pathname === "/login" ||
         pathname === "/forgot-password" ||
         pathname === "/reset-password" ||
+        // Uptime monitors must reach this without credentials. It reports
+        // posture (backend names, booleans) and never any tenant data.
+        pathname === "/api/health" ||
         pathname.startsWith("/api/auth");
       if (isPublic) return true;
       if (!isLoggedIn) return false;
