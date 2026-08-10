@@ -1,0 +1,90 @@
+# Nightly off-site database backup.
+#
+# DigitalOcean already takes daily backups of the cluster, and those are the
+# first line of defence. This exists because they live with the database: they
+# protect against losing the data, not against losing the account, the region,
+# or a mistake that propagates into every managed backup. A second copy on a
+# different provider is what makes the redundancy real.
+#
+# The cluster's firewall admits only the app and a known IP, and GitHub runners
+# get an arbitrary address each run — so the job opens a hole for itself, takes
+# the dump, and closes it again in an `always()` step. If that cleanup were ever
+# skipped the firewall would silently accumulate stale rules, which is why it is
+# not conditional on success.
+#
+# Required repository secrets:
+#   DO_API_TOKEN          — DigitalOcean token with read/write on databases
+#   BACKUP_DATABASE_URL   — the doadmin connection URI (must read past RLS)
+#   DO_DATABASE_CLUSTER_ID
+name: Nightly backup
+
+on:
+  schedule:
+    # 19:30 UTC = 01:00 IST — after every salon has closed.
+    - cron: "30 19 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install doctl
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DO_API_TOKEN }}
+
+      - name: Open the firewall for this runner
+        id: fw
+        run: |
+          RUNNER_IP=$(curl -s --max-time 20 https://api.ipify.org)
+          echo "ip=$RUNNER_IP" >> "$GITHUB_OUTPUT"
+          doctl databases firewalls append "${{ secrets.DO_DATABASE_CLUSTER_ID }}" \
+            --rule "ip_addr:$RUNNER_IP"
+          # The rule takes a few seconds to apply across the cluster.
+          sleep 20
+
+      - name: Dump
+        env:
+          DIRECT_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+        run: |
+          # postgres:17 client — pg_dump refuses to read a newer server, and the
+          # cluster is 17. Pinning this to 16 is what broke the first attempt.
+          docker run --rm -v "$PWD:/work" -w /work \
+            -e DIRECT_URL="$DIRECT_URL" \
+            postgres:17 bash scripts/backup.sh ./backups
+
+      - name: Verify the dump is readable before trusting it
+        run: |
+          DUMP=$(ls -1t backups/salonos-*.dump | head -1)
+          # A dump that cannot be listed is not a backup. This is the same
+          # mistake the restore script was written to catch: a file existing is
+          # not evidence that it contains anything.
+          OBJECTS=$(docker run --rm -v "$PWD:/work" -w /work postgres:17 \
+            pg_restore -l "$DUMP" | grep -cE "TABLE DATA|TABLE ")
+          echo "$DUMP contains $OBJECTS objects"
+          if [ "$OBJECTS" -lt 10 ]; then
+            echo "::error::Dump has only $OBJECTS objects — refusing to call this a backup."
+            exit 1
+          fi
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: salonos-db-${{ github.run_id }}
+          path: backups/*.dump
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Close the firewall
+        # `always()` on purpose: a failed dump must not leave the database
+        # reachable from a runner IP that someone else will hold tomorrow.
+        if: always()
+        run: |
+          RULE=$(doctl databases firewalls list "${{ secrets.DO_DATABASE_CLUSTER_ID }}" \
+            --no-header --format UUID,Value | grep "${{ steps.fw.outputs.ip }}" | cut -f1 | head -1)
+          if [ -n "$RULE" ]; then
+            doctl databases firewalls remove "${{ secrets.DO_DATABASE_CLUSTER_ID }}" --uuid "$RULE"
+            echo "Removed firewall rule for ${{ steps.fw.outputs.ip }}"
+          fi
