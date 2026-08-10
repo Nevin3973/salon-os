@@ -52,11 +52,55 @@ jobs:
       - name: Prepare database (schema + RLS + app role + seed)
         run: |
           npx prisma db push --skip-generate
-          npx prisma db execute --schema prisma/schema.prisma --file prisma/migrations/20260719000001_rls/migration.sql
-          npx prisma db execute --schema prisma/schema.prisma --file prisma/migrations/20260727000001_sales_rls/migration.sql
-          npx prisma db execute --schema prisma/schema.prisma --file prisma/migrations/20260728000001_retail_parity_rls/migration.sql
+          # Every migration whose directory ends in _rls, applied in order.
+          #
+          # These were previously listed one by one, which meant adding a tenant
+          # table and its policy left CI still applying the old set: the table
+          # went unprotected, and it only surfaced because a test happened to
+          # assert on it. Globbing means a new *_rls migration is picked up with
+          # no workflow change — the safe default when the thing being forgotten
+          # is a security policy.
+          for f in $(ls -d prisma/migrations/*_rls | sort); do
+            echo "Applying $f"
+            npx prisma db execute --schema prisma/schema.prisma --file "$f/migration.sql"
+          done
           npx prisma db execute --schema prisma/schema.prisma --file scripts/provision-app-role.sql
           npx tsx prisma/seed.ts
+
+      # Guards the above: if a tenant table ever ships without a policy, fail
+      # here with a clear message rather than in whichever test notices first.
+      - name: Assert every tenant table has RLS
+        run: |
+          MISSING=$(psql "$DIRECT_URL" -tAc "
+            SELECT string_agg(c.relname, ', ')
+            FROM pg_class c
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            WHERE n.nspname = 'public'
+              AND c.relkind = 'r'
+              AND EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_schema='public' AND table_name=c.relname AND column_name='orgId'
+              )
+              -- Two tables are deliberately exempt, for the same structural
+              -- reason: they are how a caller's org is DISCOVERED, so they
+              -- cannot be gated on already knowing it. Both are read with the
+              -- unscoped client before app.org_id exists, and under forced RLS
+              -- those lookups return nothing — sign-in and API-key auth would
+              -- both break outright.
+              --
+              --   Membership — requireVerifiedSession resolves the caller's org
+              --   ApiKey     — resolveOrgContext resolves the key's org
+              --
+              -- Both are bounded in the application layer instead. Anything
+              -- else with an orgId is data, not identity, and must be forced.
+              AND c.relname NOT IN ('Membership', 'ApiKey')
+              AND NOT (c.relrowsecurity AND c.relforcerowsecurity);
+          ")
+          if [ -n "$MISSING" ]; then
+            echo "::error::Tables with an orgId but no forced RLS: $MISSING"
+            exit 1
+          fi
+          echo "All tenant tables have forced RLS."
 
       - name: Lint
         run: npm run lint

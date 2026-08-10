@@ -1,47 +1,38 @@
 -- Creates the non-privileged role the application connects as.
 --
--- Row-level security does not apply to superusers, so the app must NOT connect
--- as the database owner. Run this once per environment as the owner/admin user,
--- then point DATABASE_URL at salonos_app (keep DIRECT_URL on the owner, which
--- migrations and backups need in order to read past RLS).
+-- Row-level security does not apply to superusers, and on a managed host the
+-- admin role (Neon's neondb_owner, DigitalOcean's doadmin) has BYPASSRLS. The
+-- app must therefore NOT connect as that role: point DATABASE_URL at
+-- salonos_app and keep DIRECT_URL on the admin, which migrations and backups
+-- need in order to read past RLS.
 --
--- Portable across hosts on purpose: the database is called `salonos` locally,
--- `neondb` on Neon and `defaultdb` on DigitalOcean, so the CONNECT grant is
--- issued against current_database() rather than a hardcoded name — naming one
--- made this script fail on every host but the one it was written for.
+-- Pure SQL on purpose. This file is applied both by psql and by
+-- `prisma db execute` (in CI), and the latter sends raw SQL to the server —
+-- psql meta-commands like \set, \if and \gexec are a syntax error there. An
+-- earlier version used them and broke the CI database step while working fine
+-- locally, which is the most annoying way for a script to fail.
 --
--- The password comes from the `app_role_password` setting when one is given,
--- so production never has to use the development default:
+-- The role is created with the development password. Anywhere reachable,
+-- rotate it immediately afterwards with a generated one:
 --
---   psql "$URL" -v app_role_password="$(openssl rand -base64 24)" \
---        -f scripts/provision-app-role.sql
---
--- Run without -v and it falls back to the development password, which is fine
--- for local Docker and must never be used anywhere reachable.
+--   psql "$URL" -c "ALTER ROLE salonos_app PASSWORD '$(openssl rand -base64 24)'"
 
-\if :{?app_role_password}
-\else
-  \set app_role_password 'salonos_app_dev_pw'
-\endif
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'salonos_app') THEN
+    CREATE ROLE salonos_app LOGIN PASSWORD 'salonos_app_dev_pw';
+  END IF;
+END
+$$;
 
-SELECT format(
-  'CREATE ROLE salonos_app LOGIN PASSWORD %L',
-  :'app_role_password'
-) AS stmt
-WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'salonos_app')
-\gexec
-
--- Re-running with a new password rotates it rather than failing.
-SELECT format(
-  'ALTER ROLE salonos_app PASSWORD %L',
-  :'app_role_password'
-) AS stmt
-WHERE EXISTS (SELECT FROM pg_roles WHERE rolname = 'salonos_app')
-\gexec
-
--- current_database() keeps this working whatever the host calls the database.
-SELECT format('GRANT CONNECT ON DATABASE %I TO salonos_app', current_database()) AS stmt
-\gexec
+-- The database is called `salonos` locally, `neondb` on Neon and `defaultdb` on
+-- DigitalOcean, so the CONNECT grant is issued against current_database().
+-- Naming one made this script fail on every host but the one it was written for.
+DO $$
+BEGIN
+  EXECUTE format('GRANT CONNECT ON DATABASE %I TO salonos_app', current_database());
+END
+$$;
 
 GRANT USAGE ON SCHEMA public TO salonos_app;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO salonos_app;
