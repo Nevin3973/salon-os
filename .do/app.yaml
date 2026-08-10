@@ -1,0 +1,107 @@
+# DigitalOcean App Platform spec — Salon OS, Bangalore.
+#
+# Apply with:
+#   doctl apps create --spec .do/app.yaml          # first time
+#   doctl apps update <APP_ID> --spec .do/app.yaml # subsequent changes
+#
+# Everything lives in blr1 so the counter is a few milliseconds from its data.
+# The previous setup routed through Mumbai but executed in the US, which put
+# roughly 350ms of ocean in front of every action a cashier took.
+
+name: salon-os
+region: blr
+
+services:
+  - name: web
+    dockerfile_path: Dockerfile
+    source_dir: /
+    github:
+      repo: Nevin3973/salon-os
+      branch: main
+      deploy_on_push: true
+
+    http_port: 8080
+    instance_count: 1
+    # 1 vCPU / 1GB. Seven salons of counter traffic is a small load; the reason
+    # to size up is concurrent report generation, not billing.
+    instance_size_slug: basic-xs
+
+    # App Platform will not shift traffic to a new deployment until this passes,
+    # so a broken build cannot take billing down. /api/health checks the
+    # database rather than merely answering, which is the point.
+    health_check:
+      http_path: /api/health
+      initial_delay_seconds: 30
+      period_seconds: 15
+      timeout_seconds: 10
+      success_threshold: 1
+      failure_threshold: 3
+
+    envs:
+      # ---- wired automatically from the managed database ----
+      # App Platform substitutes these at deploy time. DO requires TLS, hence
+      # sslmode=require; without it the connection is refused rather than
+      # silently downgraded.
+      - key: DATABASE_URL
+        scope: RUN_AND_BUILD_TIME
+        value: ${salonos-db.DATABASE_URL}
+      - key: DIRECT_URL
+        scope: RUN_AND_BUILD_TIME
+        value: ${salonos-db.DATABASE_URL}
+
+      # ---- set these as encrypted secrets in the DO console ----
+      # Never commit real values here; this file is in git.
+      - key: AUTH_SECRET
+        scope: RUN_TIME
+        type: SECRET
+      - key: AUTH_URL
+        scope: RUN_TIME
+        value: https://beyonddemands.in
+      - key: APP_URL
+        scope: RUN_TIME
+        value: https://beyonddemands.in
+      - key: RESEND_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: EMAIL_FROM
+        scope: RUN_TIME
+        value: noreply@beyonddemands.in
+
+      # Makes the rate limiter genuinely shared. Without these it silently
+      # degrades to per-instance counting, which /api/health reports.
+      - key: UPSTASH_REDIS_REST_URL
+        scope: RUN_TIME
+        type: SECRET
+      - key: UPSTASH_REDIS_REST_TOKEN
+        scope: RUN_TIME
+        type: SECRET
+
+      - key: SENTRY_DSN
+        scope: RUN_TIME
+        type: SECRET
+
+      - key: NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME
+        scope: RUN_AND_BUILD_TIME
+        value: zk2bhzpl
+      - key: NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET
+        scope: RUN_AND_BUILD_TIME
+        value: ml_default
+
+databases:
+  - name: salonos-db
+    engine: PG
+    # Matches the Neon source (17). pg_restore will not load a dump taken from
+    # a newer server into an older one, so the target must be at least the
+    # source's major version — the first cluster was created as 16 and could
+    # not have accepted the dump.
+    version: "17"
+    production: true
+    cluster_name: salonos-pg-blr
+
+# The domain currently sits on Hostinger DNS as a parked page. Point its
+# nameservers or an ALIAS/CNAME at App Platform before enabling this, or the
+# deploy will sit waiting on certificate issuance.
+domains:
+  - domain: beyonddemands.in
+    type: PRIMARY
+    zone: beyonddemands.in

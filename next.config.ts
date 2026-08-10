@@ -13,6 +13,11 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  // Emit a self-contained server bundle with only the modules actually reached.
+  // Required for the container image: without it the runtime stage has to carry
+  // the whole of node_modules (hundreds of MB), which makes every deploy on App
+  // Platform slower and the image far larger than it needs to be.
+  output: "standalone",
   // Pin the workspace root to this project (a stray lockfile exists in a parent dir).
   outputFileTracingRoot: path.join(__dirname),
   async headers() {

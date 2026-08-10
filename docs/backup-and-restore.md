@@ -62,6 +62,18 @@ RESTORE_URL="postgresql://salonos:PASSWORD@localhost:5432/restore_drill" \
 docker exec salonos-postgres psql -U salonos -d postgres -c "DROP DATABASE restore_drill;"
 ```
 
+**Match the client to the server.** `pg_dump` refuses to dump from a server
+newer than itself, with a bare "aborting because of server version mismatch".
+Check what you are dumping from and use a client at least that new:
+
+```bash
+psql "$DIRECT_URL" -tAc "SHOW server_version;"    # then use postgres:<major>
+```
+
+The same applies in reverse when restoring: a dump from a newer major version
+will not load into an older server, so the target cluster must be at least as
+new as the source.
+
 If `pg_dump` is not installed on the host, run the scripts inside the Postgres
 image instead — it ships the client tools:
 

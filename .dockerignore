@@ -1,0 +1,30 @@
+# Keeps the build context small and, more importantly, stops host-built
+# artefacts leaking into the image.
+#
+# node_modules matters most: this repo is developed on Windows, and copying
+# those binaries over the ones installed inside Alpine gives a broken Prisma
+# engine that fails at runtime rather than at build time.
+
+node_modules
+.next
+.git
+.github
+.vercel
+
+# Secrets must never enter an image layer — they stay in the platform's env.
+.env
+.env.*
+!.env.example
+
+# Database dumps hold real customer data.
+backups
+
+# Local tooling and test output that the runtime has no use for.
+coverage
+*.log
+.DS_Store
+.vscode
+.idea
+.claude
+docs
+README.md
