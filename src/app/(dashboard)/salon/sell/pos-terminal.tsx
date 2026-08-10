@@ -30,7 +30,10 @@ function inclusive(p: Sellable): number {
   return lineGst(p.retailPriceCents, 1, p.gstRate).totalCents;
 }
 
-export function PosTerminal({ items }: { items: Sellable[] }) {
+/** Someone at this branch who can be credited with a sale. */
+export type StaffOption = { userId: string; name: string };
+
+export function PosTerminal({ items, staff }: { items: Sellable[]; staff: StaffOption[] }) {
   const router = useRouter();
   const byId = useMemo(() => new Map(items.map((i) => [i.productId, i])), [items]);
   const categories = useMemo(
@@ -38,6 +41,10 @@ export function PosTerminal({ items }: { items: Sellable[] }) {
     [items]
   );
 
+  // null is the counter itself — a walk-in nobody in particular attended.
+  // Recorded as a deliberate choice rather than an empty field, so "no one is
+  // owed commission" and "the cashier skipped it" are not the same silence.
+  const [staffUserId, setStaffUserId] = useState<string | null>(null);
   const [cart, setCart] = useState<Map<string, number>>(new Map());
   /** Per-product discount in paise, applied before GST. */
   const [discounts, setDiscounts] = useState<Map<string, number>>(new Map());
@@ -160,6 +167,7 @@ export function PosTerminal({ items }: { items: Sellable[] }) {
         customerPhone: customerPhone.trim() || undefined,
         buyerGstin: buyerGstin.trim() || undefined,
         paymentMode,
+        staffUserId: staffUserId,
       });
       if (res.ok) router.push(`/salon/bills/${res.saleId}?new=1`);
       else setError(res.error);
@@ -287,6 +295,9 @@ export function PosTerminal({ items }: { items: Sellable[] }) {
             buyerGstin={buyerGstin}
             setBuyerGstin={setBuyerGstin}
             paymentMode={paymentMode}
+            staff={staff}
+            staffUserId={staffUserId}
+            setStaffUserId={setStaffUserId}
             setPaymentMode={setPaymentMode}
             error={error}
             pending={pending}
@@ -311,6 +322,9 @@ export function PosTerminal({ items }: { items: Sellable[] }) {
         buyerGstin={buyerGstin}
         setBuyerGstin={setBuyerGstin}
         paymentMode={paymentMode}
+        staff={staff}
+        staffUserId={staffUserId}
+        setStaffUserId={setStaffUserId}
         setPaymentMode={setPaymentMode}
         error={error}
         pending={pending}
@@ -343,6 +357,9 @@ type PanelProps = {
   buyerGstin: string;
   setBuyerGstin: (v: string) => void;
   paymentMode: PaymentModeValue;
+  staff: StaffOption[];
+  staffUserId: string | null;
+  setStaffUserId: (v: string | null) => void;
   setPaymentMode: (v: PaymentModeValue) => void;
   error: string;
   pending: boolean;
@@ -352,6 +369,7 @@ type PanelProps = {
 function BillPanel(props: PanelProps) {
   const { lines, totals, unitCount, setQty, setDiscount, showCustomer, setShowCustomer, customerName,
     setCustomerName, customerPhone, setCustomerPhone, buyerGstin, setBuyerGstin, paymentMode,
+    staff, staffUserId, setStaffUserId,
     setPaymentMode, error, pending, complete } = props;
 
   return (
@@ -403,6 +421,40 @@ function BillPanel(props: PanelProps) {
         ) : (
           <button onClick={() => setShowCustomer(true)}
             className="text-xs font-semibold text-velvet active:text-velvet-dark">+ Add customer details</button>
+        )}
+
+        {/* Who gets the credit. Always answered — "Counter" is a real choice
+            meaning a walk-in nobody in particular attended, not a skipped
+            field. Chips rather than a dropdown: one tap at a busy till. */}
+        {staff.length > 0 && (
+          <div>
+            <div className="text-[11px] uppercase tracking-[0.12em] text-faint mb-1.5">Served by</div>
+            <div className="flex flex-wrap gap-1.5">
+              <button
+                onClick={() => setStaffUserId(null)}
+                className={`h-9 px-3 rounded-lg text-xs font-semibold border transition-colors select-none ${
+                  staffUserId === null
+                    ? "bg-velvet text-on-velvet border-velvet"
+                    : "border-line text-muted active:bg-velvet-soft"
+                }`}
+              >
+                Counter
+              </button>
+              {staff.map((m) => (
+                <button
+                  key={m.userId}
+                  onClick={() => setStaffUserId(m.userId)}
+                  className={`h-9 px-3 rounded-lg text-xs font-semibold border transition-colors select-none ${
+                    staffUserId === m.userId
+                      ? "bg-velvet text-on-velvet border-velvet"
+                      : "border-line text-muted active:bg-velvet-soft"
+                  }`}
+                >
+                  {m.name}
+                </button>
+              ))}
+            </div>
+          </div>
         )}
 
         <div className="grid grid-cols-3 gap-2">

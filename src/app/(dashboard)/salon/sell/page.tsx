@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { requireScopedSession } from "@/lib/tenant";
-import { PosTerminal, type Sellable } from "./pos-terminal";
+import { PosTerminal, type Sellable, type StaffOption } from "./pos-terminal";
 import { optimizedImage } from "@/lib/cloudinary";
 
 export default async function SellPage() {
@@ -14,6 +14,19 @@ export default async function SellPage() {
         where: { branchId, kind: "RETAIL", onHand: { gt: 0 } },
         include: { product: true },
       })
+    : [];
+
+  // Everyone who works at this branch and could be credited with a sale.
+  // Scoped to the branch: crediting a colleague at another salon would make
+  // commission reports meaningless.
+  const staff: StaffOption[] = branchId
+    ? (
+        await db.membership.findMany({
+          where: { locationId: branchId, role: { in: ["PURCHASE_MANAGER", "SALON_STAFF"] } },
+          select: { userId: true, user: { select: { name: true } } },
+          orderBy: { user: { name: "asc" } },
+        })
+      ).map((m) => ({ userId: m.userId, name: m.user.name }))
     : [];
 
   const items: Sellable[] = stock
@@ -74,5 +87,5 @@ export default async function SellPage() {
     );
   }
 
-  return <PosTerminal items={items} />;
+  return <PosTerminal items={items} staff={staff} />;
 }

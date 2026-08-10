@@ -47,20 +47,34 @@ export function LoginArt() {
 
         {/* Stems, drawn on with a dash offset so they appear to grow. */}
         <g stroke="url(#stemGrad)" strokeWidth="1.5" strokeLinecap="round">
-          <path className="stem stem-1" d="M470 900 C 470 700, 430 560, 430 400" />
-          <path className="stem stem-2" d="M540 900 C 540 720, 505 600, 512 470" />
-          <path className="stem stem-3" d="M395 900 C 395 760, 360 660, 352 545" />
+          <path className="stem stem-1" pathLength="1" d="M470 900 C 470 700, 430 560, 430 400" />
+          <path className="stem stem-2" pathLength="1" d="M540 900 C 540 720, 505 600, 512 470" />
+          <path className="stem stem-3" pathLength="1" d="M395 900 C 395 760, 360 660, 352 545" />
         </g>
 
-        {/* Three blooms at different scales, each opening in turn. */}
-        <g className="bloom bloom-1" transform="translate(430 400)">
-          <Petals />
+        {/* Three blooms at different scales, each opening in turn.
+
+            Positioning sits on the OUTER group and the animation on the inner
+            one, deliberately. A CSS `transform` in a keyframe replaces the SVG
+            `transform` attribute rather than composing with it — putting both
+            on one element wiped `translate(...)` to the identity matrix and
+            stacked all three flowers off-screen at the top-left corner. The
+            inner group's local origin is the flower's centre, so scale and
+            rotate pivot correctly about it. */}
+        <g transform="translate(430 400)">
+          <g className="bloom bloom-1">
+            <Petals />
+          </g>
         </g>
-        <g className="bloom bloom-2" transform="translate(512 470) scale(0.62)">
-          <Petals />
+        <g transform="translate(512 470) scale(0.62)">
+          <g className="bloom bloom-2">
+            <Petals />
+          </g>
         </g>
-        <g className="bloom bloom-3" transform="translate(352 545) scale(0.45)">
-          <Petals />
+        <g transform="translate(352 545) scale(0.45)">
+          <g className="bloom bloom-3">
+            <Petals />
+          </g>
         </g>
 
         {/* Drifting motes, the visual equivalent of dust in a sunbeam. */}

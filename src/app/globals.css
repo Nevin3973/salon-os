@@ -472,8 +472,13 @@ textarea:focus-visible {
    ═══════════════════════════════════════════════════════════ */
 
 .login-art .stem {
-  stroke-dasharray: 620;
-  stroke-dashoffset: 620;
+  /* The paths carry pathLength="1", so their real lengths (502, 431 and 358
+     user units) all normalise to 1. A single hard-coded dash value cannot suit
+     three different lengths: at 620 the offset spent the first stretch of the
+     animation with nothing visible on the shorter stems, which read as a
+     stutter before they appeared. */
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
   animation: art-draw 2.2s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 .login-art .stem-2 { animation-delay: 0.18s; }
@@ -481,6 +486,11 @@ textarea:focus-visible {
 
 .login-art .bloom {
   opacity: 0;
+  /* Pivot about the flower's own centre. The parent group's translate puts the
+     local origin there, so 0 0 is correct — without this, SVG resolves the
+     origin against the viewport corner and the blooms swing in from off-screen
+     instead of opening in place. */
+  transform-origin: 0 0;
   animation: art-bloom 1.5s cubic-bezier(0.34, 1.4, 0.5, 1) forwards;
 }
 /* Blooms open after their stem has drawn most of the way. */

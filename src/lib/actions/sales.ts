@@ -43,6 +43,13 @@ const recordSchema = z.object({
     .min(1),
   customerName: z.string().trim().max(120).optional(),
   customerPhone: z.string().trim().max(20).optional(),
+  /**
+   * Who gets credit for the sale. Null means the counter itself — a walk-in
+   * nobody in particular attended. Kept explicit rather than left blank so
+   * "nobody is owed commission for this" and "the cashier skipped the step"
+   * are the same recorded decision rather than indistinguishable silence.
+   */
+  staffUserId: z.string().min(1).nullable().optional(),
   buyerGstin: z
     .string()
     .trim()
@@ -108,6 +115,7 @@ export async function recordSale(input: {
   customerPhone?: string;
   buyerGstin?: string;
   paymentMode: (typeof PAYMENT_MODES)[number];
+  staffUserId?: string | null;
 }): Promise<SaleResult> {
   const parsed = recordSchema.safeParse(input);
   if (!parsed.success) {
@@ -117,6 +125,24 @@ export async function recordSale(input: {
   const session = await requireVerifiedSession(["PURCHASE_MANAGER", "SALON_STAFF"]);
   const branchId = session.locationId;
   if (!branchId) return { ok: false, error: "Your account is not assigned to a branch." };
+
+  // Credit may only go to someone who actually works at this branch. Without
+  // this check the id arrives straight from the browser, and a crafted request
+  // could attribute a sale — and any commission on it — to anyone at all,
+  // including a member of a different tenant.
+  let staffId: string | null = null;
+  if (parsed.data.staffUserId) {
+    const member = await prisma.membership.findFirst({
+      where: {
+        userId: parsed.data.staffUserId,
+        orgId: session.orgId,
+        locationId: branchId,
+      },
+      select: { userId: true },
+    });
+    if (!member) return { ok: false, error: "That staff member isn't at this branch." };
+    staffId = member.userId;
+  }
 
   // Collapse duplicate product lines so a product can't be split to dodge the
   // on-hand check; discounts on the same product add up.
@@ -167,6 +193,11 @@ export async function recordSale(input: {
           taxCents: g.taxCents,
           lineTotalCents: g.totalCents,
           unitCostCents: p.priceCents,
+          // Written per line even though the counter picks one person for the
+          // whole bill. Crediting individual products to different staff later
+          // is then a UI change rather than a migration of history that cannot
+          // be reconstructed.
+          staffUserId: staffId,
         };
       });
       const totals = billTotals(
