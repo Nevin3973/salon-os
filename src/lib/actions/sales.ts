@@ -628,10 +628,22 @@ export async function setBranchRack(input: { productId: string; rackId: string }
         select: { id: true },
       });
       if (!product) throw new Error("PRODUCT_MISSING");
+      // The rack label is where the sellable stock physically sits, so it
+      // belongs to the RETAIL row. Salon-use stock lives at the back bar and
+      // is not something a cashier looks up while billing.
       await tx.branchStock.upsert({
-        where: { branchId_productId: { branchId, productId: product.id } },
+        where: {
+          branchId_productId_kind: { branchId, productId: product.id, kind: "RETAIL" },
+        },
         update: { rackId: rack },
-        create: { orgId: session.orgId, branchId, productId: product.id, onHand: 0, rackId: rack },
+        create: {
+          orgId: session.orgId,
+          branchId,
+          productId: product.id,
+          kind: "RETAIL",
+          onHand: 0,
+          rackId: rack,
+        },
       });
     });
   } catch (e) {

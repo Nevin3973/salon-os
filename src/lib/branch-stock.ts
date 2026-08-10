@@ -1,4 +1,4 @@
-import { Prisma } from "@prisma/client";
+import { Prisma, type BranchStockKind } from "@prisma/client";
 
 /**
  * Moves a branch's on-hand stock for one product and records the movement, all
@@ -26,6 +26,12 @@ export async function bumpBranchStock(
     orgId: string;
     branchId: string;
     productId: string;
+    /**
+     * Which pool to move. Defaults to RETAIL, which is what every caller meant
+     * before salon-use stock existed — so existing behaviour is unchanged and
+     * only code that deliberately says SALON_USE touches the other pool.
+     */
+    kind?: BranchStockKind;
     delta?: number;
     setTo?: number;
     reason: string;
@@ -35,16 +41,20 @@ export async function bumpBranchStock(
   }
 ): Promise<{ prev: number; next: number }> {
   const { orgId, branchId, productId, reason } = args;
+  const kind = args.kind ?? "RETAIL";
   if ((args.delta === undefined) === (args.setTo === undefined)) {
     throw new Error("bumpBranchStock: pass exactly one of delta or setTo");
   }
 
-  // Lock the shelf row for this product if it already exists.
+  // Lock the shelf row for this product AND pool. Without `kind` in both this
+  // lock and the read below, a branch holding the product in both pools would
+  // lock one row and then read whichever the database returned first — so a
+  // retail sale could silently spend salon-use stock.
   await tx.$queryRaw(
-    Prisma.sql`SELECT id FROM "BranchStock" WHERE "branchId" = ${branchId} AND "productId" = ${productId} FOR UPDATE`
+    Prisma.sql`SELECT id FROM "BranchStock" WHERE "branchId" = ${branchId} AND "productId" = ${productId} AND "kind" = ${kind}::"BranchStockKind" FOR UPDATE`
   );
 
-  const existing = await tx.branchStock.findFirst({ where: { branchId, productId } });
+  const existing = await tx.branchStock.findFirst({ where: { branchId, productId, kind } });
   const prev = existing?.onHand ?? 0;
   // Compute the target UNDER the lock, so `setTo` is a true absolute set.
   let next = args.setTo ?? prev + (args.delta ?? 0);
@@ -57,7 +67,7 @@ export async function bumpBranchStock(
   if (existing) {
     await tx.branchStock.update({ where: { id: existing.id }, data: { onHand: next } });
   } else {
-    await tx.branchStock.create({ data: { orgId, branchId, productId, onHand: next } });
+    await tx.branchStock.create({ data: { orgId, branchId, productId, kind, onHand: next } });
   }
 
   await tx.branchStockMovement.create({
@@ -65,6 +75,10 @@ export async function bumpBranchStock(
       orgId,
       branchId,
       productId,
+      // Recorded on the movement too: without it the ledger cannot say which
+      // pool a change came out of, and the two would be impossible to
+      // reconcile after the fact.
+      kind,
       userId: args.userId ?? null,
       prevQty: prev,
       newQty: next,

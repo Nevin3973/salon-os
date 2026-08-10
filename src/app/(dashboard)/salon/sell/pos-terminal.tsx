@@ -20,6 +20,9 @@ export type Sellable = {
   hsn: string | null;
   onHand: number;
   rackId: string | null;
+  /// Product shot for the tile. Cashiers recognise a bottle far faster than
+  /// they read a name, which is the whole point at a busy counter.
+  imageUrl: string | null;
 };
 
 /** Per-unit price the customer pays, GST included — shown on the tile. */
@@ -219,7 +222,27 @@ export function PosTerminal({ items }: { items: Sellable[] }) {
                       {inCart}
                     </span>
                   )}
-                  <div>
+                  <div className="flex gap-2.5 items-start">
+                    {/* Recognising a bottle is faster than reading a name, so
+                        the shot leads. Products without one fall back to an
+                        initial rather than a broken-image gap. */}
+                    {p.imageUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={p.imageUrl}
+                        alt=""
+                        loading="lazy"
+                        className="w-11 h-11 rounded-lg object-cover bg-bg shrink-0"
+                      />
+                    ) : (
+                      <span
+                        aria-hidden
+                        className="w-11 h-11 rounded-lg bg-velvet-soft text-velvet shrink-0 grid place-items-center font-display text-lg font-bold"
+                      >
+                        {p.name.charAt(0).toUpperCase()}
+                      </span>
+                    )}
+                    <div className="min-w-0">
                     <div className="font-semibold text-sm leading-tight line-clamp-2">{p.name}</div>
                     <div className="text-xs text-faint mt-0.5 truncate">
                       {p.rackId ? (
@@ -227,6 +250,7 @@ export function PosTerminal({ items }: { items: Sellable[] }) {
                       ) : (
                         p.brand
                       )}
+                    </div>
                     </div>
                   </div>
                   <div className="flex items-baseline justify-between mt-2">

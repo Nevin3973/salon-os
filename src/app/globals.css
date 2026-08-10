@@ -461,3 +461,88 @@ textarea:focus-visible {
    an A4 page box onto 58mm rolls. The A4 page box lives in the print block
    above; the roll page box is injected at print time by the print menu, which
    is the only way to vary it per print. */
+
+/* ═══════════════════════════════════════════════════════════
+   SIGN-IN ARTWORK
+   Botanical vector that opens as the page loads. CSS only —
+   no JavaScript on the path to signing in. Every animation
+   is one-shot and settles: a login screen should not have a
+   perpetual loop pulling at the eye while someone types a
+   password.
+   ═══════════════════════════════════════════════════════════ */
+
+.login-art .stem {
+  stroke-dasharray: 620;
+  stroke-dashoffset: 620;
+  animation: art-draw 2.2s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+.login-art .stem-2 { animation-delay: 0.18s; }
+.login-art .stem-3 { animation-delay: 0.34s; }
+
+.login-art .bloom {
+  opacity: 0;
+  animation: art-bloom 1.5s cubic-bezier(0.34, 1.4, 0.5, 1) forwards;
+}
+/* Blooms open after their stem has drawn most of the way. */
+.login-art .bloom-1 { animation-delay: 0.85s; }
+.login-art .bloom-2 { animation-delay: 1.05s; }
+.login-art .bloom-3 { animation-delay: 1.22s; }
+
+.login-art .art-glow {
+  opacity: 0;
+  animation: art-fade 2.4s ease-out 0.5s forwards;
+}
+
+/* The one thing that keeps moving, slowly, so the screen feels alive
+   rather than frozen — small enough to sit outside the reading path. */
+.login-art .mote {
+  animation: art-drift 9s ease-in-out infinite;
+}
+.login-art .mote-2 { animation-duration: 12s; animation-delay: -3s; }
+.login-art .mote-3 { animation-duration: 10.5s; animation-delay: -6s; }
+.login-art .mote-4 { animation-duration: 13s; animation-delay: -1.5s; }
+
+@keyframes art-draw {
+  to { stroke-dashoffset: 0; }
+}
+@keyframes art-bloom {
+  from { opacity: 0; transform: scale(0.4) rotate(-18deg); }
+  to   { opacity: 1; transform: scale(1) rotate(0deg); }
+}
+@keyframes art-fade {
+  to { opacity: 1; }
+}
+@keyframes art-drift {
+  0%, 100% { transform: translate(0, 0); }
+  50%      { transform: translate(14px, -26px); }
+}
+
+/* The form itself rises in, once, as the page settles. */
+.login-panel {
+  animation: panel-rise 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.login-panel > * { animation: panel-rise 0.6s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.login-panel > *:nth-child(1) { animation-delay: 0.06s; }
+.login-panel > *:nth-child(2) { animation-delay: 0.12s; }
+.login-panel > *:nth-child(3) { animation-delay: 0.18s; }
+
+@keyframes panel-rise {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Motion is decoration here; it must never be the reason someone feels
+   unwell. Everything lands in its finished state instead. */
+@media (prefers-reduced-motion: reduce) {
+  .login-art .stem,
+  .login-art .bloom,
+  .login-art .art-glow,
+  .login-art .mote,
+  .login-panel,
+  .login-panel > * {
+    animation: none !important;
+    opacity: 1;
+    stroke-dashoffset: 0;
+    transform: none;
+  }
+}

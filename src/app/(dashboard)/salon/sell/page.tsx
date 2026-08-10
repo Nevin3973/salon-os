@@ -1,14 +1,17 @@
 import Link from "next/link";
 import { requireScopedSession } from "@/lib/tenant";
 import { PosTerminal, type Sellable } from "./pos-terminal";
+import { optimizedImage } from "@/lib/cloudinary";
 
 export default async function SellPage() {
   const { session, db } = await requireScopedSession(["PURCHASE_MANAGER", "SALON_STAFF"]);
   const branchId = session.locationId ?? undefined;
 
+  // RETAIL only. Salon-use stock is held for services and must never appear on
+  // the till, or a cashier will sell the back bar's open bottles.
   const stock = branchId
     ? await db.branchStock.findMany({
-        where: { branchId, onHand: { gt: 0 } },
+        where: { branchId, kind: "RETAIL", onHand: { gt: 0 } },
         include: { product: true },
       })
     : [];
@@ -28,6 +31,10 @@ export default async function SellPage() {
       hsn: s.product.hsn,
       onHand: s.onHand,
       rackId: s.rackId,
+      // Served through Cloudinary's transform so the till pulls a small,
+      // format-optimised image rather than the full upload — a counter on a
+      // slow connection should not wait on product photos.
+      imageUrl: s.product.imageUrl ? optimizedImage(s.product.imageUrl, 200) : null,
     }))
     .sort((a, b) => a.name.localeCompare(b.name));
 

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
 import Link from "next/link";
+import { LoginArt } from "@/components/login-art";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -27,9 +28,21 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="theme-ops min-h-screen bg-bg text-ink flex flex-col">
-      <div className="flex-1 flex items-center justify-center px-6">
-        <div className="w-full max-w-sm">
+    <div className="theme-ops min-h-screen bg-bg text-ink flex flex-col lg:flex-row">
+      {/* Artwork panel. Hidden below `lg` — on a counter tablet held in
+          portrait the form should own the screen, not compete with decoration. */}
+      <div className="relative hidden lg:block lg:w-1/2 xl:w-3/5 border-r border-line">
+        <LoginArt />
+        <div className="absolute bottom-12 left-12 right-12">
+          <p className="font-display text-2xl text-ink/90 leading-snug max-w-sm">
+            Everything your salon sells, stocks and bills — in one place.
+          </p>
+          <p className="text-muted text-sm mt-2">Beyond Demands</p>
+        </div>
+      </div>
+
+      <div className="flex-1 flex items-center justify-center px-6 py-16">
+        <div className="w-full max-w-sm login-panel">
           <div className="font-display text-3xl text-ink select-none">
             Salon<span className="text-velvet"> OS</span>
           </div>

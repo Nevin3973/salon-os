@@ -273,22 +273,42 @@ enum PaymentMode {
 /// What a single branch currently holds on its shelf for one product. Topped
 /// up when a warehouse dispatch is delivered, drawn down when sold to a
 /// customer. Distinct from Product.stock, which is the warehouse's own stock.
+/// What a branch is holding a given unit of stock FOR.
+///
+/// A salon buys one shampoo and uses it two ways: sealed bottles on the shelf
+/// to sell, and opened ones at the back bar for washes. Those are the same
+/// product but different money — retail is revenue, back bar is a cost of
+/// delivering a service. Keeping them in one pool makes both the margin
+/// reports and the reorder points wrong.
+enum BranchStockKind {
+  /// Sellable stock. The POS draws only from this.
+  RETAIL
+  /// Held for use during services. Never sold; reduced by hand when counted.
+  SALON_USE
+}
+
 model BranchStock {
-  id        String   @id @default(cuid())
+  id        String          @id @default(cuid())
   orgId     String
-  org       Org      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  org       Org             @relation(fields: [orgId], references: [id], onDelete: Cascade)
   branchId  String
-  branch    Location @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  branch    Location        @relation(fields: [branchId], references: [id], onDelete: Cascade)
   productId String
-  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
-  onHand    Int      @default(0)
+  product   Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  /// Which pool this row counts. A branch can hold the same product in both,
+  /// as two rows — hence `kind` being part of the unique key below.
+  kind      BranchStockKind @default(RETAIL)
+  onHand    Int             @default(0)
   /// Physical shelf/rack/bin label at this branch, e.g. "A-12" — helps staff
   /// find the product fast while billing. Per-branch (same product, different
   /// rack at another branch).
   rackId    String?
-  updatedAt DateTime @updatedAt
+  updatedAt DateTime        @updatedAt
 
-  @@unique([branchId, productId])
+  /// Was [branchId, productId]. Adding `kind` is what lets one product sit in
+  /// both pools at a branch; existing rows become RETAIL, which is what they
+  /// already were in practice.
+  @@unique([branchId, productId, kind])
   @@index([orgId, branchId])
   @@index([orgId, productId])
 }
@@ -296,13 +316,17 @@ model BranchStock {
 /// Append-only ledger of every change to a branch's on-hand stock, so a shelf
 /// count can always be reconciled the same way warehouse stock can.
 model BranchStockMovement {
-  id        String   @id @default(cuid())
+  id        String          @id @default(cuid())
   orgId     String
-  org       Org      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  org       Org             @relation(fields: [orgId], references: [id], onDelete: Cascade)
   branchId  String
-  branch    Location @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  branch    Location        @relation(fields: [branchId], references: [id], onDelete: Cascade)
   productId String
-  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  product   Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  /// Which pool the movement came out of. Without this the ledger cannot say
+  /// whether stock left the shelf or the back bar, and the two pools become
+  /// impossible to reconcile after the fact.
+  kind      BranchStockKind @default(RETAIL)
   userId    String?
   prevQty   Int
   newQty    Int
@@ -310,7 +334,7 @@ model BranchStockMovement {
   reason    String
   /// The order or sale that caused this movement, for traceability.
   refId     String?
-  createdAt DateTime @default(now())
+  createdAt DateTime        @default(now())
 
   @@index([orgId, branchId, createdAt])
   @@index([orgId, productId])
