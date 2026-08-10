@@ -62,6 +62,43 @@ describe("Postgres row-level security", () => {
     expect(crossRead).toBe(0);
   });
 
+  it("walls off the customer master, which holds names and phone numbers", async () => {
+    // The most sensitive table in the schema: one salon group must never be
+    // able to read another's customer list. A new tenant table with no policy
+    // fails silently — the queries simply return everything — so this asserts
+    // the wall rather than assuming the migration was applied.
+    const unscoped = await prisma.customer.count();
+    expect(unscoped).toBe(0);
+
+    const planted = await withOrgTx(orgBId, (tx) =>
+      tx.customer.create({
+        data: { orgId: orgBId, phone: `9${Date.now().toString().slice(-9)}`, name: "Tenant B customer" },
+      })
+    );
+
+    // Tenant A must not see it, by count or by direct lookup.
+    const crossCount = await withOrgTx(orgAId, (tx) =>
+      tx.customer.count({ where: { orgId: orgBId } })
+    );
+    expect(crossCount).toBe(0);
+    const crossRead = await withOrgTx(orgAId, (tx) =>
+      tx.customer.findUnique({ where: { id: planted.id } })
+    );
+    expect(crossRead).toBeNull();
+
+    await withOrgTx(orgBId, (tx) => tx.customer.delete({ where: { id: planted.id } }));
+  });
+
+  it("rejects a customer written under another org's context", async () => {
+    await expect(
+      withOrgTx(orgAId, (tx) =>
+        tx.customer.create({
+          data: { orgId: orgBId, phone: `8${Date.now().toString().slice(-9)}`, name: "Should never exist" },
+        })
+      )
+    ).rejects.toThrow();
+  });
+
   it("orders and their items are walled the same way", async () => {
     // Fail closed: without an org context the tables must look empty,
     // no matter how many orders actually exist.

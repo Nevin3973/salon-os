@@ -2,7 +2,7 @@
 // See C:\Users\NM\.claude\plans\vectorized-prancing-meteor.md for the design rationale.
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
   binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
 }
 
@@ -31,20 +31,21 @@ model Org {
   legalName String?
   createdAt DateTime @default(now())
 
-  locations   Location[]
-  memberships Membership[]
-  products    Product[]
-  orders      Order[]
-  authCodes   AuthorizationCode[]
-  auditLog    AuditLogEntry[]
-  movements   StockMovement[]
-  addresses   Address[]
-  apiKeys     ApiKey[]
-  sales       Sale[]
-  branchStock BranchStock[]
+  locations            Location[]
+  memberships          Membership[]
+  products             Product[]
+  orders               Order[]
+  authCodes            AuthorizationCode[]
+  auditLog             AuditLogEntry[]
+  movements            StockMovement[]
+  addresses            Address[]
+  apiKeys              ApiKey[]
+  sales                Sale[]
+  branchStock          BranchStock[]
   branchStockMovements BranchStockMovement[]
-  invoiceSeries InvoiceSeries[]
-  saleReturns SaleReturn[]
+  invoiceSeries        InvoiceSeries[]
+  saleReturns          SaleReturn[]
+  customers            Customer[]
 }
 
 enum LocationType {
@@ -53,24 +54,24 @@ enum LocationType {
 }
 
 model Location {
-  id       String       @id @default(cuid())
-  orgId    String
-  org      Org          @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  type     LocationType
-  name     String
-  isActive Boolean      @default(true)
+  id            String       @id @default(cuid())
+  orgId         String
+  org           Org          @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  type          LocationType
+  name          String
+  isActive      Boolean      @default(true)
   /// Short code that starts this branch's invoice numbers, e.g. "ROS" →
   /// ROS/25-26/0001. Falls back to the first letters of the name.
   invoicePrefix String?
 
-  memberships Membership[]
-  orders      Order[]
-  addresses   Address[]
-  branchStock BranchStock[]
+  memberships          Membership[]
+  orders               Order[]
+  addresses            Address[]
+  branchStock          BranchStock[]
   branchStockMovements BranchStockMovement[]
-  sales       Sale[]
-  invoiceSeries InvoiceSeries[]
-  returns     SaleReturn[]
+  sales                Sale[]
+  invoiceSeries        InvoiceSeries[]
+  returns              SaleReturn[]
 
   @@index([orgId, type])
 }
@@ -95,25 +96,27 @@ model InvoiceSeries {
 }
 
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  passwordHash String
-  name         String
-  phone        String?
-  mustChangePassword Boolean @default(false)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @default(now()) @updatedAt
+  id                 String   @id @default(cuid())
+  email              String   @unique
+  passwordHash       String
+  name               String
+  phone              String?
+  mustChangePassword Boolean  @default(false)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @default(now()) @updatedAt
 
-  memberships Membership[]
-  resetTokens PasswordResetToken[]
+  memberships       Membership[]
+  resetTokens       PasswordResetToken[]
+  /// Sale lines this person is credited with selling.
+  saleItemsCredited SaleItem[]           @relation("SaleItemStaff")
 }
 
 // Shipping/delivery addresses. Scoped to an org; optionally pinned to a
 // branch so a Purchase Manager manages their own branch's address book.
 model Address {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   orgId       String
-  org         Org      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  org         Org       @relation(fields: [orgId], references: [id], onDelete: Cascade)
   locationId  String?
   location    Location? @relation(fields: [locationId], references: [id])
   label       String // e.g. "Salon front desk", "Service entrance"
@@ -124,9 +127,9 @@ model Address {
   city        String
   state       String?
   postalCode  String?
-  country     String   @default("India")
-  isDefault   Boolean  @default(false)
-  isActive    Boolean  @default(true)
+  country     String    @default("India")
+  isDefault   Boolean   @default(false)
+  isActive    Boolean   @default(true)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -145,7 +148,7 @@ enum Role {
 }
 
 model Membership {
-  id         String    @id @default(cuid())
+  id         String  @id @default(cuid())
   userId     String
   orgId      String
   role       Role
@@ -166,45 +169,45 @@ model Membership {
 // ————————————————————————————————————————————————————————
 
 model Product {
-  id       String  @id @default(cuid())
-  orgId    String
-  org      Org     @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  sku      String
-  name     String
-  brand    String
-  category String
-  unit     String
-  stock    Int     @default(0)
-  minStock Int     @default(0)
-  active   Boolean @default(true)
-  imageUrl String?
+  id               String  @id @default(cuid())
+  orgId            String
+  org              Org     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  sku              String
+  name             String
+  brand            String
+  category         String
+  unit             String
+  stock            Int     @default(0)
+  minStock         Int     @default(0)
+  active           Boolean @default(true)
+  imageUrl         String?
   /// Manufacturer barcode (EAN/UPC) as printed on the pack — what a counter
   /// scanner actually reads. Distinct from `sku`, which is our internal code.
-  barcode  String?
+  barcode          String?
   /// Bin/rack the product sits in inside the WAREHOUSE, e.g. "R3-B02". Used to
   /// sort the picking list. The salon's own shelf location is per-branch and
   /// lives on BranchStock.rackId instead.
-  binLocation String?
+  binLocation      String?
   /// Price the branch pays the warehouse (procurement cost), minor units.
   /// Doubles as the salon's cost basis when computing retail margin.
-  priceCents Int   @default(0)
+  priceCents       Int     @default(0)
   /// Price the salon charges the end customer, exclusive of GST, minor units.
-  retailPriceCents Int @default(0)
+  retailPriceCents Int     @default(0)
   /// GST rate charged to the customer, as a whole percent (0/5/12/18/28).
-  gstRate  Int     @default(0)
+  gstRate          Int     @default(0)
   /// HSN code printed on the customer's tax invoice.
-  hsn      String?
+  hsn              String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  orderItems OrderItem[]
-  movements  StockMovement[]
-  cartItems  CartItem[]
-  branchStock BranchStock[]
+  orderItems           OrderItem[]
+  movements            StockMovement[]
+  cartItems            CartItem[]
+  branchStock          BranchStock[]
   branchStockMovements BranchStockMovement[]
-  saleItems  SaleItem[]
-  returnItems SaleReturnItem[]
+  saleItems            SaleItem[]
+  returnItems          SaleReturnItem[]
 
   @@unique([orgId, sku])
   /// Nullable, so products without a barcode simply don't participate.
@@ -316,12 +319,47 @@ model BranchStockMovement {
 /// A customer bill raised at a branch. GST is computed per line and summed;
 /// prices and cost are snapshotted so later catalogue changes never rewrite
 /// history. A VOID sale returns its units to the branch shelf.
+/// A retail customer, identified by phone — the natural key in India, and the
+/// only thing a walk-in reliably gives you.
+///
+/// Deliberately scoped to the ORG, not the branch: the same person visiting a
+/// different salon must be the same customer, or the history is worthless the
+/// moment a second branch opens.
+model Customer {
+  id        String   @id @default(cuid())
+  orgId     String
+  org       Org      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  /// Digits only, normalised on write, so lookup is exact regardless of how
+  /// the cashier typed it (+91, spaces, dashes).
+  phone     String
+  name      String
+  email     String?
+  /// Free-text the counter can keep — allergies, preferred brand, and so on.
+  notes     String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sales Sale[]
+
+  @@unique([orgId, phone])
+  @@index([orgId, name])
+}
+
 model Sale {
   id            String      @id @default(cuid())
   orgId         String
   org           Org         @relation(fields: [orgId], references: [id], onDelete: Cascade)
   branchId      String
   branch        Location    @relation(fields: [branchId], references: [id])
+  /// Who bought. Null only when the cashier explicitly chose "walk-in" below.
+  customerId    String?
+  customer      Customer?   @relation(fields: [customerId], references: [id])
+  /// True when the counter deliberately declined to record a customer.
+  /// Kept as its own flag rather than inferring it from a null customerId, so
+  /// "walk-in by choice" stays distinguishable from data that went missing —
+  /// otherwise you can never tell a policy problem from a bug.
+  isWalkIn      Boolean     @default(false)
   /// Sequence number within this branch+FY series.
   invoiceNo     Int
   /// The number as printed, e.g. "ROS/25-26/0001". Unique per org.
@@ -365,24 +403,24 @@ model Sale {
 /// original invoice intact — the returned units go back on the shelf and a
 /// credit note is raised for the refunded value.
 model SaleReturn {
-  id            String      @id @default(cuid())
-  orgId         String
-  org           Org         @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  branchId      String
-  branch        Location    @relation(fields: [branchId], references: [id])
-  saleId        String
-  sale          Sale        @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  id              String      @id @default(cuid())
+  orgId           String
+  org             Org         @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  branchId        String
+  branch          Location    @relation(fields: [branchId], references: [id])
+  saleId          String
+  sale            Sale        @relation(fields: [saleId], references: [id], onDelete: Cascade)
   /// Credit-note number, e.g. "CN/ROS/25-26/0003".
-  creditNoteCode String
-  reason        String
-  note          String?
+  creditNoteCode  String
+  reason          String
+  note            String?
   /// How the money went back to the customer.
-  refundMode    PaymentMode @default(CASH)
-  subtotalCents Int         @default(0)
-  taxCents      Int         @default(0)
-  totalCents    Int         @default(0)
+  refundMode      PaymentMode @default(CASH)
+  subtotalCents   Int         @default(0)
+  taxCents        Int         @default(0)
+  totalCents      Int         @default(0)
   createdByUserId String
-  createdAt     DateTime    @default(now())
+  createdAt       DateTime    @default(now())
 
   items SaleReturnItem[]
 
@@ -436,6 +474,15 @@ model SaleItem {
   unitCostCents  Int     @default(0)
   /// Units the customer has brought back against this line.
   returnedQty    Int     @default(0)
+  /// Which staff member gets credit for selling this line.
+  ///
+  /// Held at line grain even though the counter currently picks one person for
+  /// the whole bill and every line is written with that value. Crediting
+  /// individual products to different staff is a UI change from here; had this
+  /// lived on Sale instead it would be a migration of history that cannot be
+  /// reconstructed. Null on bills raised before this existed.
+  staffUserId    String?
+  staff          User?   @relation("SaleItemStaff", fields: [staffUserId], references: [id])
 
   returnItems SaleReturnItem[]
 
@@ -444,22 +491,22 @@ model SaleItem {
 }
 
 model Order {
-  id             String      @id @default(cuid())
-  orgId          String
-  org            Org         @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  orderNo        Int
-  branchId       String
-  branch         Location    @relation(fields: [branchId], references: [id])
-  placedByUserId String
-  status         OrderStatus @default(PENDING)
-  authCodeId     String?
-  authCode       AuthorizationCode? @relation(fields: [authCodeId], references: [id])
+  id              String             @id @default(cuid())
+  orgId           String
+  org             Org                @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  orderNo         Int
+  branchId        String
+  branch          Location           @relation(fields: [branchId], references: [id])
+  placedByUserId  String
+  status          OrderStatus        @default(PENDING)
+  authCodeId      String?
+  authCode        AuthorizationCode? @relation(fields: [authCodeId], references: [id])
   shipToAddressId String?
-  shipToAddress   Address? @relation(fields: [shipToAddressId], references: [id])
+  shipToAddress   Address?           @relation(fields: [shipToAddressId], references: [id])
   deliveryNote    String?
   /// Order value at the time it was placed (sum of item qty × unit price), in minor units.
   /// Re-computed when a Purchase Manager edits a still-PENDING order.
-  totalCents      Int      @default(0)
+  totalCents      Int                @default(0)
   /// Why the order ended the way it did — set when the warehouse rejects it or
   /// accepts a return. Free-form label from OUTSTANDING/REJECTION/RETURN_REASONS.
   closureReason   String?
@@ -476,23 +523,23 @@ model Order {
 }
 
 model OrderItem {
-  id           String  @id @default(cuid())
-  orderId      String
-  order        Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  productId    String
-  product      Product @relation(fields: [productId], references: [id])
-  requestedQty Int
+  id             String  @id @default(cuid())
+  orderId        String
+  order          Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId      String
+  product        Product @relation(fields: [productId], references: [id])
+  requestedQty   Int
   /// Net units the branch currently holds: dispatched − returned.
-  deliveredQty Int     @default(0)
+  deliveredQty   Int     @default(0)
   /// Cumulative units sent back to the warehouse and restocked.
-  returnedQty  Int     @default(0)
-  note         String?
+  returnedQty    Int     @default(0)
+  note           String?
   /// Price snapshot at order time — catalogue prices may change later.
-  unitPriceCents Int   @default(0)
+  unitPriceCents Int     @default(0)
 
   outstandingReason String?
-  outstandingEta     DateTime?
-  outstandingRemark  String?
+  outstandingEta    DateTime?
+  outstandingRemark String?
 
   deliveries OrderItemDelivery[]
 
