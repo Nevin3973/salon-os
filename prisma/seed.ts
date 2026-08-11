@@ -55,9 +55,16 @@ function hash(s: string): number {
 }
 
 /** A stable rack/bin label like "C-07": aisle by category, slot by branch+product. */
-function rackFor(category: string, branchId: string, productId: string): string {
+/**
+ * Keyed on branch NAME and product SKU, never on generated ids.
+ *
+ * cuids are fresh on every seed run, so hashing them produced different racks,
+ * different bill counts and different sample data each time — which is how the
+ * local and hosted databases drifted apart despite running the same seed.
+ */
+function rackFor(category: string, branchName: string, sku: string): string {
   const aisle = String.fromCharCode(65 + Math.floor(hash(`aisle:${category}`) * 8)); // A–H
-  const slot = 1 + Math.floor(hash(`${branchId}:${productId}`) * 40); // 1–40
+  const slot = 1 + Math.floor(hash(`${branchName}:${sku}`) * 40); // 1–40
   return `${aisle}-${String(slot).padStart(2, "0")}`;
 }
 
@@ -561,7 +568,7 @@ async function seedBranchStockAndSales(ctx: SeededOrg) {
 
     // Opening shelf count for each sellable product.
     for (const p of sellable) {
-      const base = 6 + Math.floor(hash(`${branch.id}:${p.id}`) * 20); // 6..25
+      const base = 6 + Math.floor(hash(`${branch.name}:${p.id}`) * 20); // 6..25
       shelf.set(p.id, base);
       await prisma.branchStock.create({
         data: {
@@ -569,7 +576,7 @@ async function seedBranchStockAndSales(ctx: SeededOrg) {
           branchId: branch.id,
           productId: p.id,
           onHand: base,
-          rackId: rackFor(p.category, branch.id, p.id),
+          rackId: rackFor(p.category, branch.name, p.sku),
         },
       });
       await prisma.branchStockMovement.create({
@@ -586,18 +593,18 @@ async function seedBranchStockAndSales(ctx: SeededOrg) {
     let branchSeq = 0;
 
     // A spread of sample bills over the last ~12 days.
-    const billCount = 8 + Math.floor(hash(`bills:${branch.id}`) * 6); // 8..13
+    const billCount = 8 + Math.floor(hash(`bills:${branch.name}`) * 6); // 8..13
     for (let s = 0; s < billCount; s++) {
-      const daysAgo = Math.floor(hash(`${branch.id}:sale:${s}`) * 12); // 0..11
-      const lineN = 1 + Math.floor(hash(`${branch.id}:sale:${s}:n`) * 3); // 1..3
+      const daysAgo = Math.floor(hash(`${branch.name}:sale:${s}`) * 12); // 0..11
+      const lineN = 1 + Math.floor(hash(`${branch.name}:sale:${s}:n`) * 3); // 1..3
       const chosen: { p: (typeof sellable)[number]; qty: number }[] = [];
       for (let l = 0; l < lineN; l++) {
-        const idx = Math.floor(hash(`${branch.id}:sale:${s}:l:${l}`) * sellable.length);
+        const idx = Math.floor(hash(`${branch.name}:sale:${s}:l:${l}`) * sellable.length);
         const p = sellable[idx];
         if (!p || chosen.some((c) => c.p.id === p.id)) continue;
         const have = shelf.get(p.id) ?? 0;
         if (have <= 0) continue;
-        const qty = Math.min(have, 1 + Math.floor(hash(`${branch.id}:sale:${s}:q:${l}`) * 3)); // 1..3
+        const qty = Math.min(have, 1 + Math.floor(hash(`${branch.name}:sale:${s}:q:${l}`) * 3)); // 1..3
         chosen.push({ p, qty });
       }
       if (chosen.length === 0) continue;
@@ -609,7 +616,7 @@ async function seedBranchStockAndSales(ctx: SeededOrg) {
         // Give roughly one line in six a small discount, so the demo shows one.
         const gross = p.retailPriceCents * qty;
         const discountCents =
-          hash(`${branch.id}:disc:${s}:${li}`) < 0.16 ? Math.round(gross * 0.1 / 100) * 100 : 0;
+          hash(`${branch.name}:disc:${s}:${li}`) < 0.16 ? Math.round(gross * 0.1 / 100) * 100 : 0;
         const g = lineGst(p.retailPriceCents, qty, p.gstRate, discountCents);
         return {
           productId: p.id, name: p.name, hsn: p.hsn, qty,
@@ -634,7 +641,7 @@ async function seedBranchStockAndSales(ctx: SeededOrg) {
           invoiceCode: formatInvoiceCode(prefix, fy, branchSeq),
           fy,
           soldByUserId: pm.id,
-          customerName: SAMPLE_CUSTOMERS[Math.floor(hash(`${branch.id}:cust:${s}`) * SAMPLE_CUSTOMERS.length)],
+          customerName: SAMPLE_CUSTOMERS[Math.floor(hash(`${branch.name}:cust:${s}`) * SAMPLE_CUSTOMERS.length)],
           paymentMode: paymentModes[s % 3],
           subtotalCents: totals.subtotalCents,
           discountCents: totals.discountCents,

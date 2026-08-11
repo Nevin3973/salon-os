@@ -5,7 +5,22 @@ import { useRouter } from "next/navigation";
 import { adjustBranchStock } from "@/lib/actions/sales";
 import { BRANCH_ADJUST_REASONS } from "@/lib/constants";
 
-export function AdjustCell({ productId, name, onHand }: { productId: string; name: string; onHand: number }) {
+/**
+ * `kind` decides which pool this cell counts. Salon-use stock has no other way
+ * into the system: warehouse deliveries land on the shelf as RETAIL, and a
+ * manager moves what the back bar needs across by counting it here.
+ */
+export function AdjustCell({
+  productId,
+  name,
+  onHand,
+  kind = "RETAIL",
+}: {
+  productId: string;
+  name: string;
+  onHand: number;
+  kind?: "RETAIL" | "SALON_USE";
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState(String(onHand));
@@ -26,7 +41,7 @@ export function AdjustCell({ productId, name, onHand }: { productId: string; nam
     }
     setError("");
     startTransition(async () => {
-      const res = await adjustBranchStock({ productId, newOnHand: n, reason, authCode });
+      const res = await adjustBranchStock({ productId, newOnHand: n, reason, authCode, kind });
       if (res.ok) {
         setOpen(false);
         router.refresh();

@@ -10,8 +10,8 @@ import { WORDMARK } from "@/lib/brand";
  *
  * A till often sits unattended on a shared device between customers, so after a
  * few quiet minutes this covers the screen and asks the signed-in person to
- * re-enter their password. The lock state is kept in sessionStorage, so a
- * refresh (or an accidental navigation) doesn't clear it.
+ * re-enter their password. The lock state is kept in localStorage, so it
+ * survives a refresh and applies to every tab at once.
  *
  * This is a supervision control, not a security boundary: it stops a passer-by
  * using someone else's till, but anyone with developer tools could hide the
@@ -40,12 +40,30 @@ export function TillLock({
 
   const lock = useCallback(() => {
     setLocked(true);
-    try { sessionStorage.setItem(LOCK_KEY, "1"); } catch { /* private mode */ }
+    try { localStorage.setItem(LOCK_KEY, String(Date.now())); } catch { /* private mode */ }
   }, []);
 
   // Restore a lock that was in place before a refresh.
   useEffect(() => {
-    try { if (sessionStorage.getItem(LOCK_KEY) === "1") setLocked(true); } catch { /* ignore */ }
+    try { if (localStorage.getItem(LOCK_KEY)) setLocked(true); } catch { /* ignore */ }
+  }, []);
+
+  /**
+   * Keep every tab in step.
+   *
+   * The state lives in localStorage rather than sessionStorage because
+   * sessionStorage is scoped to a single tab — a second tab had its own
+   * unlocked state and its own idle timer, so the lock was one Ctrl+T away
+   * from being bypassed entirely. The `storage` event fires in the OTHER tabs,
+   * so locking one locks them all and unlocking releases them all.
+   */
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key !== LOCK_KEY) return;
+      setLocked(e.newValue !== null);
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
   }, []);
 
   /**
@@ -88,7 +106,7 @@ export function TillLock({
       if (res.ok) {
         setLocked(false);
         setPassword("");
-        try { sessionStorage.removeItem(LOCK_KEY); } catch { /* ignore */ }
+        try { localStorage.removeItem(LOCK_KEY); } catch { /* ignore */ }
       } else {
         setError(res.error);
         setPassword("");
@@ -134,7 +152,7 @@ export function TillLock({
 
         <button
           onClick={() => {
-            try { sessionStorage.removeItem(LOCK_KEY); } catch { /* ignore */ }
+            try { localStorage.removeItem(LOCK_KEY); } catch { /* ignore */ }
             signOut({ callbackUrl: "/login" });
           }}
           className="mt-4 text-xs text-muted hover:text-ink cursor-pointer"

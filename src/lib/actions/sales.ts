@@ -579,6 +579,13 @@ const adjustSchema = z.object({
   newOnHand: z.number().int().min(0).max(1_000_000),
   reason: z.enum(BRANCH_ADJUST_REASONS),
   authCode: z.string().min(1).max(64),
+  /**
+   * Which pool to set. Defaults to RETAIL so existing callers are unchanged.
+   * This is also the only way stock enters SALON_USE today: warehouse
+   * deliveries land on the shelf, and a manager moves what the back bar needs
+   * by counting it into this pool.
+   */
+  kind: z.enum(["RETAIL", "SALON_USE"]).optional(),
 });
 
 /**
@@ -591,6 +598,7 @@ export async function adjustBranchStock(input: {
   newOnHand: number;
   reason: (typeof BRANCH_ADJUST_REASONS)[number];
   authCode: string;
+  kind?: "RETAIL" | "SALON_USE";
 }): Promise<SaleResult> {
   const parsed = adjustSchema.safeParse(input);
   if (!parsed.success) {
@@ -618,6 +626,7 @@ export async function adjustBranchStock(input: {
         orgId: session.orgId,
         branchId,
         productId: product.id,
+        kind: parsed.data.kind ?? "RETAIL",
         setTo: parsed.data.newOnHand,
         reason: `Adjustment · ${parsed.data.reason}`,
         userId: session.userId,
@@ -722,4 +731,59 @@ function saleError(e: unknown): SaleResult {
   // the one failure nobody would otherwise hear about.
   reportError(e, { where: "sales" });
   return { ok: false, error: "Something went wrong. Please try again." };
+}
+
+// ————————————————————————————————————————————————————————
+// Till display settings
+// ————————————————————————————————————————————————————————
+
+/**
+ * Hides or shows a product category on this branch's till.
+ *
+ * A speed control, not a permission. A branch that never sells cleaning
+ * supplies should not scroll past them mid-queue — but the category stays in
+ * inventory and reports, and a scanned barcode still sells, because refusing a
+ * product the cashier is physically holding on the basis of a display filter
+ * would be a worse bug than the clutter it saves.
+ *
+ * Manager-only: a cashier changing what the till shows mid-shift is exactly the
+ * kind of quiet change that makes a day's takings hard to explain.
+ */
+export async function setPosCategoryHidden(input: {
+  category: string;
+  hidden: boolean;
+}): Promise<SaleResult> {
+  const parsed = z
+    .object({ category: z.string().trim().min(1).max(80), hidden: z.boolean() })
+    .safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Pick a category." };
+
+  const session = await requireVerifiedSession("PURCHASE_MANAGER");
+  const branchId = session.locationId;
+  if (!branchId) return { ok: false, error: "Your account is not assigned to a branch." };
+
+  try {
+    await withOrg(session.orgId, async (tx) => {
+      const branch = await tx.location.findFirst({
+        where: { id: branchId, orgId: session.orgId },
+        select: { posHiddenCategories: true },
+      });
+      if (!branch) throw new Error("BRANCH_MISSING");
+
+      const current = new Set(branch.posHiddenCategories);
+      if (parsed.data.hidden) current.add(parsed.data.category);
+      else current.delete(parsed.data.category);
+
+      await tx.location.update({
+        where: { id: branchId },
+        data: { posHiddenCategories: [...current].sort() },
+      });
+    });
+  } catch (e) {
+    return saleError(e);
+  }
+
+  revalidatePath("/salon/sell");
+  revalidatePath("/salon/inventory");
+  return { ok: true, saleId: "" };
 }

@@ -6,6 +6,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { requireVerifiedSession, setOrgConfig } from "@/lib/tenant";
 import { logAudit } from "@/lib/audit";
+import { reportError } from "@/lib/observability";
 import { orderCode, fmtDate } from "@/lib/format";
 import { allocateDispatch } from "@/lib/allocation";
 import { bumpBranchStock } from "@/lib/branch-stock";
@@ -451,5 +452,11 @@ function msg(e: unknown): string {
   }
   if (raw === "NOT_RETURNABLE") return "Only a delivered order can have stock returned against it.";
   if (raw === "NOTHING_TO_RETURN") return "Enter how many units are coming back.";
+
+  // Everything above is an outcome we anticipated and explained. Reaching here
+  // means something genuinely unplanned happened while moving stock, and the
+  // warehouse just saw "please try again" — the one failure nobody would
+  // otherwise hear about, on the path that decides what physically ships.
+  reportError(e, { where: "dispatch" });
   return "Something went wrong. Please try again.";
 }

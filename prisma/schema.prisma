@@ -60,15 +60,23 @@ enum LocationType {
 }
 
 model Location {
-  id            String       @id @default(cuid())
-  orgId         String
-  org           Org          @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  type          LocationType
-  name          String
-  isActive      Boolean      @default(true)
+  id                  String       @id @default(cuid())
+  orgId               String
+  org                 Org          @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  type                LocationType
+  name                String
+  isActive            Boolean      @default(true)
   /// Short code that starts this branch's invoice numbers, e.g. "ROS" →
   /// ROS/25-26/0001. Falls back to the first letters of the name.
-  invoicePrefix String?
+  invoicePrefix       String?
+  /// Product categories this branch hides from its till.
+  ///
+  /// Purely a speed control: a branch that never sells cleaning supplies should
+  /// not have to scroll past them mid-queue. It is NOT a permission — hidden
+  /// products remain visible in inventory and reports, and the server still
+  /// accepts a sale for them if one is scanned, because a barcode a cashier
+  /// physically holds should never be refused on the basis of a display filter.
+  posHiddenCategories String[]     @default([])
 
   memberships          Membership[]
   orders               Order[]

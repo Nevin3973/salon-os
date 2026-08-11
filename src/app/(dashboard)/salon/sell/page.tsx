@@ -30,8 +30,24 @@ export default async function SellPage() {
       ).map((m) => ({ id: m.id, name: m.name, title: m.title }))
     : [];
 
+  // Categories this branch has chosen not to show at the till. A display
+  // filter only: the products stay in inventory and reports, and a scanned
+  // barcode still sells them.
+  const branch = branchId
+    ? await db.location.findFirst({
+        where: { id: branchId },
+        select: { posHiddenCategories: true },
+      })
+    : null;
+  const hidden = new Set(branch?.posHiddenCategories ?? []);
+
   const items: Sellable[] = stock
-    .filter((s) => s.product.active && s.product.retailPriceCents > 0)
+    .filter(
+      (s) =>
+        s.product.active &&
+        s.product.retailPriceCents > 0 &&
+        !hidden.has(s.product.category)
+    )
     .map((s) => ({
       productId: s.productId,
       sku: s.product.sku,

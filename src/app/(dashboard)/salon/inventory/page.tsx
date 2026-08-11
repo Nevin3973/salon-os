@@ -2,6 +2,7 @@ import { requireScopedSession } from "@/lib/tenant";
 import { formatMoney } from "@/lib/money";
 import { AdjustCell } from "./adjust-cell";
 import { RackCell } from "./rack-cell";
+import { CategoryVisibility } from "./category-visibility";
 
 export default async function SalonInventoryPage() {
   const { session, db } = await requireScopedSession("PURCHASE_MANAGER");
@@ -11,6 +12,12 @@ export default async function SalonInventoryPage() {
     db.product.findMany({ where: { active: true }, orderBy: [{ category: "asc" }, { name: "asc" }] }),
     branchId ? db.branchStock.findMany({ where: { branchId } }) : Promise.resolve([]),
   ]);
+
+  const branch = branchId
+    ? await db.location.findFirst({ where: { id: branchId }, select: { posHiddenCategories: true } })
+    : null;
+  const hiddenCategories = branch?.posHiddenCategories ?? [];
+  const allCategories = [...new Set(products.map((p) => p.category))].sort();
   // Keyed by pool as well as product. A branch can hold the same product in
   // both, so a Map keyed on productId alone would silently keep whichever row
   // the database returned last and report one pool's figure as the whole.
@@ -59,6 +66,8 @@ export default async function SalonInventoryPage() {
         <Stat label="Shelf value (retail)" value={formatMoney(shelfValue)} />
       </div>
 
+      <CategoryVisibility categories={allCategories} hidden={hiddenCategories} />
+
       <div className="bg-surface border border-line rounded-[10px] overflow-x-auto mt-5">
         <table className="w-full text-sm">
           <thead>
@@ -93,7 +102,15 @@ export default async function SalonInventoryPage() {
                   {r.salonUse}
                 </td>
                 <td className="px-4 py-3">
-                  <AdjustCell productId={r.id} name={r.name} onHand={r.onHand} />
+                  <div className="flex flex-col items-end gap-1">
+                    <AdjustCell productId={r.id} name={r.name} onHand={r.onHand} kind="RETAIL" />
+                    <AdjustCell
+                      productId={r.id}
+                      name={`${r.name} (salon use)`}
+                      onHand={r.salonUse}
+                      kind="SALON_USE"
+                    />
+                  </div>
                 </td>
               </tr>
             ))}

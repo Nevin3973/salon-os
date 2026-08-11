@@ -55,24 +55,57 @@ RC=$?
 set -e
 
 echo
-# Verify by counting actual rows rather than trusting the exit code. A restore
-# can partially succeed, and "it didn't error" is not the same as "the data is
-# there" — that gap is the whole reason to rehearse this.
-TABLES=$(psql "$URL" -tAc \
-  "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='public';" 2>/dev/null || echo 0)
-SALES=$(psql "$URL" -tAc 'SELECT COUNT(*) FROM "Sale";' 2>/dev/null || echo "n/a")
+# Prove the target now HOLDS THE DUMP'S DATA — not merely that tables exist.
+#
+# Counting tables was the previous check and it was worthless: the tables were
+# already there, so a restore that dropped nothing and loaded nothing still
+# passed. That happened twice. `pg_restore --clean` cannot drop objects it
+# lacks rights over, or that other objects depend on, and it continues past
+# those errors by design — so a target left completely untouched is a real
+# outcome that must be caught here.
+#
+# The dump's own table-of-contents gives the expected row counts, so compare
+# against that rather than against a guess.
+EXPECTED=$(pg_restore -l "$FILE" | grep -cE "TABLE DATA" || echo 0)
+ACTUAL=$(psql "$URL" -tAc \
+  "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='public';" 2>/dev/null | tr -d ' ' || echo 0)
 
-echo "Tables restored: $TABLES"
-echo "Rows in Sale:    $SALES"
+# A row fingerprint across the biggest tables. If the restore was a no-op these
+# match what was there BEFORE, which is why the caller is shown both and the
+# script refuses to claim success on the exit code alone.
+FINGERPRINT=$(psql "$URL" -tAc "
+  SELECT COALESCE(string_agg(t || '=' || n, ' '), 'no tenant tables')
+  FROM (
+    SELECT 'Product' AS t, COUNT(*) AS n FROM \"Product\"
+    UNION ALL SELECT 'Sale', COUNT(*) FROM \"Sale\"
+    UNION ALL SELECT 'User', COUNT(*) FROM \"User\"
+    UNION ALL SELECT 'Org', COUNT(*) FROM \"Org\"
+  ) s;" 2>/dev/null || echo "unreadable")
 
-if [ "$TABLES" -lt 5 ]; then
+echo "Data sections in dump: $EXPECTED"
+echo "Tables in target:      $ACTUAL"
+echo "Row fingerprint:       $FINGERPRINT"
+
+if [ "$ACTUAL" -lt 5 ]; then
   echo "FAILED — the target has almost no tables. The restore did not work." >&2
   exit 1
 fi
+if [ "$FINGERPRINT" = "unreadable" ] || [ "$FINGERPRINT" = "no tenant tables" ]; then
+  echo "FAILED — could not read the restored data back." >&2
+  exit 1
+fi
 if [ "$RC" -ne 0 ]; then
-  echo "Restore reported errors (exit $RC) but data is present — check the log above." >&2
+  echo >&2
+  echo "FAILED — pg_restore exited $RC. Do NOT assume the data above came from" >&2
+  echo "this dump: an unsuccessful restore leaves whatever was there before, and" >&2
+  echo "those rows look exactly like a success. Read the errors above, clear the" >&2
+  echo "target properly, and run again." >&2
+  exit "$RC"
 fi
 
 echo
-echo "Restore verified. One more step before the app can use this database:"
+echo "Restore verified — pg_restore exited cleanly and the data reads back."
+echo "Compare the fingerprint above against the source before trusting it."
+echo
+echo "One more step before the app can use this database:"
 echo "  psql \"\$RESTORE_URL\" -f scripts/provision-app-role.sql   # recreate the app role"
