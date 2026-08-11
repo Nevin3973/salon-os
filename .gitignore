@@ -47,3 +47,6 @@ next-env.d.ts
 
 # Local editor/tooling config
 .claude/
+
+# AI tooling scratch — not part of the product
+.agents/

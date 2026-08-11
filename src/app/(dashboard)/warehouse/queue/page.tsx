@@ -5,7 +5,7 @@ import { PageHeader, StatGrid } from "@/components/console-ui";
 import { DispatchBoard, type QueueOrder } from "./dispatch-board";
 
 export default async function QueuePage() {
-  const { session, db } = await requireScopedSession("WAREHOUSE_MANAGER");
+  const { db } = await requireScopedSession("WAREHOUSE_MANAGER");
 
   const orders = await db.order.findMany({
     where: { status: { in: ["PENDING", "PROCESSING"] } },
