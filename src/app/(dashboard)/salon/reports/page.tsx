@@ -2,6 +2,7 @@ import { requireScopedSession } from "@/lib/tenant";
 import { formatMoney } from "@/lib/money";
 import { fmtDate } from "@/lib/format";
 import { salesSummary, parseRange } from "@/lib/reports";
+import { StaffSales } from "./staff-sales";
 import { PageHeader, StatGrid, ExportButton } from "@/components/console-ui";
 import { ReportControls } from "./report-controls";
 
@@ -28,7 +29,7 @@ export default async function SalonReportsPage({
   const qs = `from=${fromStr}&to=${toStr}`;
 
   const summary = await salesSummary({ orgId: session.orgId, branchId: session.locationId ?? null }, range);
-  const { totals, days, payments, topProducts } = summary;
+  const { totals, days, payments, topProducts, staff } = summary;
   const peak = Math.max(1, ...days.map((d) => d.revenueCents));
 
   return (
@@ -108,6 +109,16 @@ export default async function SalonReportsPage({
             )}
           </tbody>
         </table>
+      </section>
+
+      {/* Staff-wise sales — who sold what. Full width because the expanded
+          rows carry each person's own product breakdown. */}
+      <section className="print-block mb-5">
+        <h2 className="text-sm font-semibold mb-3">
+          Sales by staff
+          <span className="font-normal text-muted"> · tap a row for their products</span>
+        </h2>
+        <StaffSales rows={staff} />
       </section>
 
       <div className="grid gap-5 lg:grid-cols-2">

@@ -373,6 +373,27 @@ export type SalesSummary = {
   days: SaleDayRow[];
   payments: PayRow[];
   topProducts: SaleProductRow[];
+  /** Who sold what, for commission and for spotting who needs coaching. */
+  staff: SaleStaffRow[];
+};
+
+/**
+ * One staff member's contribution over the period.
+ *
+ * `products` is their own best-sellers, which is the question a manager
+ * actually asks: not just who sold the most, but what each person is good at
+ * selling. Rows are netted for returns like every other figure here — a sale
+ * that came back is not a sale anyone should be credited for.
+ */
+export type SaleStaffRow = {
+  staffId: string | null;
+  name: string;
+  title: string | null;
+  bills: number;
+  units: number;
+  revenueCents: number;
+  marginCents: number;
+  products: { name: string; units: number; revenueCents: number }[];
 };
 
 /**
@@ -387,7 +408,10 @@ export async function salesSummary(scope: ReportScope, range: ReportRange): Prom
       ...(scope.branchId ? { branchId: scope.branchId } : {}),
       ...(createdAtFilter(range) ? { createdAt: createdAtFilter(range) } : {}),
     },
-    include: { items: true, returns: { include: { items: true } } },
+    include: {
+      items: { include: { staff: { select: { id: true, name: true, title: true } } } },
+      returns: { include: { items: true } },
+    },
     orderBy: { createdAt: "desc" },
   });
 
@@ -398,6 +422,11 @@ export async function salesSummary(scope: ReportScope, range: ReportRange): Prom
   const days = new Map<string, SaleDayRow>();
   const payments = new Map<PaymentModeValue, PayRow>();
   const products = new Map<string, SaleProductRow>();
+  // Keyed on staff id, with null meaning the counter itself — a walk-in nobody
+  // in particular is owed credit for. Kept as its own row rather than dropped,
+  // so the totals still reconcile against the headline revenue.
+  const staff = new Map<string, SaleStaffRow>();
+  const staffBillSeen = new Map<string, Set<string>>();
 
   for (const s of sales) {
     if (s.status === "VOID") {
@@ -447,6 +476,42 @@ export async function salesSummary(scope: ReportScope, range: ReportRange): Prom
       p.revenueCents += keptNet;
       p.marginCents += keptNet - it.unitCostCents * keptQty;
       products.set(it.name, p);
+
+      // Credit sits on the LINE, so a bill split across two people is counted
+      // correctly today rather than after a later migration.
+      const sid = it.staffId ?? "__counter__";
+      const row =
+        staff.get(sid) ??
+        {
+          staffId: it.staffId,
+          name: it.staff?.name ?? "Counter",
+          title: it.staff?.title ?? null,
+          bills: 0,
+          units: 0,
+          revenueCents: 0,
+          marginCents: 0,
+          products: [] as { name: string; units: number; revenueCents: number }[],
+        };
+      row.units += keptQty;
+      row.revenueCents += keptNet;
+      row.marginCents += keptNet - it.unitCostCents * keptQty;
+
+      const own = row.products.find((x) => x.name === it.name);
+      if (own) {
+        own.units += keptQty;
+        own.revenueCents += keptNet;
+      } else {
+        row.products.push({ name: it.name, units: keptQty, revenueCents: keptNet });
+      }
+
+      // A bill counts once per person however many of its lines they sold.
+      const seen = staffBillSeen.get(sid) ?? new Set<string>();
+      if (!seen.has(s.id)) {
+        seen.add(s.id);
+        row.bills++;
+        staffBillSeen.set(sid, seen);
+      }
+      staff.set(sid, row);
     }
   }
 
@@ -456,6 +521,13 @@ export async function salesSummary(scope: ReportScope, range: ReportRange): Prom
     days: [...days.values()].sort((a, b) => a.key.localeCompare(b.key)),
     payments: [...payments.values()].sort((a, b) => b.revenueCents - a.revenueCents),
     topProducts: [...products.values()].sort((a, b) => b.revenueCents - a.revenueCents).slice(0, 12),
+    staff: [...staff.values()]
+      .map((r) => ({
+        ...r,
+        // Their own top lines, best first.
+        products: r.products.sort((a, b) => b.revenueCents - a.revenueCents).slice(0, 8),
+      }))
+      .sort((a, b) => b.revenueCents - a.revenueCents),
   };
 }
 
