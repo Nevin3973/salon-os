@@ -16,17 +16,18 @@ export default async function SellPage() {
       })
     : [];
 
-  // Everyone who works at this branch and could be credited with a sale.
-  // Scoped to the branch: crediting a colleague at another salon would make
-  // commission reports meaningless.
+  // Everyone who can be credited with a sale here: staff pinned to this
+  // branch, plus anyone who covers several (branchId null). Read from Staff
+  // rather than User, because most stylists never sign in and should not need
+  // a login account to be creditable.
   const staff: StaffOption[] = branchId
     ? (
-        await db.membership.findMany({
-          where: { locationId: branchId, role: { in: ["PURCHASE_MANAGER", "SALON_STAFF"] } },
-          select: { userId: true, user: { select: { name: true } } },
-          orderBy: { user: { name: "asc" } },
+        await db.staff.findMany({
+          where: { isActive: true, OR: [{ branchId }, { branchId: null }] },
+          select: { id: true, name: true, title: true },
+          orderBy: { name: "asc" },
         })
-      ).map((m) => ({ userId: m.userId, name: m.user.name }))
+      ).map((m) => ({ id: m.id, name: m.name, title: m.title }))
     : [];
 
   const items: Sellable[] = stock

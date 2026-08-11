@@ -1,5 +1,10 @@
 // Salon OS — multi-tenant schema
-// See C:\Users\NM\.claude\plans\vectorized-prancing-meteor.md for the design rationale.
+//
+// Every tenant table carries an orgId and is protected by Postgres row-level
+// security (ENABLE + FORCE), so a query with a missing or buggy org filter
+// still cannot read another tenant's rows. The two exceptions are Membership
+// and ApiKey, which are how a caller's org is discovered and therefore cannot
+// be gated on already knowing it. `scripts/assert-rls.ts` enforces this in CI.
 
 generator client {
   provider      = "prisma-client-js"
@@ -46,6 +51,7 @@ model Org {
   invoiceSeries        InvoiceSeries[]
   saleReturns          SaleReturn[]
   customers            Customer[]
+  staff                Staff[]
 }
 
 enum LocationType {
@@ -72,6 +78,7 @@ model Location {
   sales                Sale[]
   invoiceSeries        InvoiceSeries[]
   returns              SaleReturn[]
+  staff                Staff[]
 
   @@index([orgId, type])
 }
@@ -105,10 +112,12 @@ model User {
   createdAt          DateTime @default(now())
   updatedAt          DateTime @default(now()) @updatedAt
 
-  memberships       Membership[]
-  resetTokens       PasswordResetToken[]
-  /// Sale lines this person is credited with selling.
-  saleItemsCredited SaleItem[]           @relation("SaleItemStaff")
+  memberships  Membership[]
+  resetTokens  PasswordResetToken[]
+  /// Their staff record, when they are also someone who can be credited
+  /// with a sale. Managers and cashiers have one; a stylist has a Staff row
+  /// with no User at all.
+  staffProfile Staff?
 }
 
 // Shipping/delivery addresses. Scoped to an org; optionally pinned to a
@@ -370,6 +379,42 @@ model Customer {
   @@index([orgId, name])
 }
 
+/// Someone who can be credited with a sale: a stylist, the manager, or the
+/// counter staff.
+///
+/// Deliberately NOT the same thing as a User. Most stylists never sign into
+/// this software — crediting them through a login account would mean inventing
+/// an email and a password for every one of them, and creating a security
+/// surface for people who have no reason to have one. An admin adds a stylist
+/// by typing a name.
+///
+/// `userId` links the ones who DO sign in (managers, cashiers), so a person is
+/// one record rather than two that have to be kept in step.
+model Staff {
+  id       String    @id @default(cuid())
+  orgId    String
+  org      Org       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  /// Which salon they work at. Null for someone who covers several.
+  branchId String?
+  branch   Location? @relation(fields: [branchId], references: [id])
+  name     String
+  /// Free text — "Senior Stylist", "Manager", "Counter". Display only; it
+  /// grants nothing. Permissions live on Membership.role, and conflating the
+  /// two would turn a label into an access-control decision.
+  title    String?
+  isActive Boolean   @default(true)
+  /// Set only for staff who also have a login.
+  userId   String?   @unique
+  user     User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  saleItems SaleItem[]
+
+  @@index([orgId, branchId, isActive])
+}
+
 model Sale {
   id            String      @id @default(cuid())
   orgId         String
@@ -498,15 +543,19 @@ model SaleItem {
   unitCostCents  Int     @default(0)
   /// Units the customer has brought back against this line.
   returnedQty    Int     @default(0)
-  /// Which staff member gets credit for selling this line.
+  /// Which staff member is credited with this line — the person responsible
+  /// for the sale, which is not necessarily whoever operated the till. Null
+  /// means the counter itself: a walk-in nobody in particular is owed credit
+  /// for. Never printed on the customer's invoice; this is internal
+  /// attribution for commission and reporting.
   ///
   /// Held at line grain even though the counter currently picks one person for
   /// the whole bill and every line is written with that value. Crediting
   /// individual products to different staff is a UI change from here; had this
   /// lived on Sale instead it would be a migration of history that cannot be
-  /// reconstructed. Null on bills raised before this existed.
-  staffUserId    String?
-  staff          User?   @relation("SaleItemStaff", fields: [staffUserId], references: [id])
+  /// reconstructed.
+  staffId        String?
+  staff          Staff?  @relation(fields: [staffId], references: [id])
 
   returnItems SaleReturnItem[]
 

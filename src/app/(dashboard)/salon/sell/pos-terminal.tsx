@@ -30,8 +30,9 @@ function inclusive(p: Sellable): number {
   return lineGst(p.retailPriceCents, 1, p.gstRate).totalCents;
 }
 
-/** Someone at this branch who can be credited with a sale. */
-export type StaffOption = { userId: string; name: string };
+/** Someone who can be credited with a sale — a stylist, manager or counter
+ * staff. Not necessarily someone with a login. */
+export type StaffOption = { id: string; name: string; title: string | null };
 
 export function PosTerminal({ items, staff }: { items: Sellable[]; staff: StaffOption[] }) {
   const router = useRouter();
@@ -44,7 +45,7 @@ export function PosTerminal({ items, staff }: { items: Sellable[]; staff: StaffO
   // null is the counter itself — a walk-in nobody in particular attended.
   // Recorded as a deliberate choice rather than an empty field, so "no one is
   // owed commission" and "the cashier skipped it" are not the same silence.
-  const [staffUserId, setStaffUserId] = useState<string | null>(null);
+  const [staffId, setStaffId] = useState<string | null>(null);
   const [cart, setCart] = useState<Map<string, number>>(new Map());
   /** Per-product discount in paise, applied before GST. */
   const [discounts, setDiscounts] = useState<Map<string, number>>(new Map());
@@ -167,7 +168,7 @@ export function PosTerminal({ items, staff }: { items: Sellable[]; staff: StaffO
         customerPhone: customerPhone.trim() || undefined,
         buyerGstin: buyerGstin.trim() || undefined,
         paymentMode,
-        staffUserId: staffUserId,
+        staffId,
       });
       if (res.ok) router.push(`/salon/bills/${res.saleId}?new=1`);
       else setError(res.error);
@@ -296,8 +297,8 @@ export function PosTerminal({ items, staff }: { items: Sellable[]; staff: StaffO
             setBuyerGstin={setBuyerGstin}
             paymentMode={paymentMode}
             staff={staff}
-            staffUserId={staffUserId}
-            setStaffUserId={setStaffUserId}
+            staffId={staffId}
+            setStaffId={setStaffId}
             setPaymentMode={setPaymentMode}
             error={error}
             pending={pending}
@@ -323,8 +324,8 @@ export function PosTerminal({ items, staff }: { items: Sellable[]; staff: StaffO
         setBuyerGstin={setBuyerGstin}
         paymentMode={paymentMode}
         staff={staff}
-        staffUserId={staffUserId}
-        setStaffUserId={setStaffUserId}
+        staffId={staffId}
+        setStaffId={setStaffId}
         setPaymentMode={setPaymentMode}
         error={error}
         pending={pending}
@@ -358,8 +359,8 @@ type PanelProps = {
   setBuyerGstin: (v: string) => void;
   paymentMode: PaymentModeValue;
   staff: StaffOption[];
-  staffUserId: string | null;
-  setStaffUserId: (v: string | null) => void;
+  staffId: string | null;
+  setStaffId: (v: string | null) => void;
   setPaymentMode: (v: PaymentModeValue) => void;
   error: string;
   pending: boolean;
@@ -369,7 +370,7 @@ type PanelProps = {
 function BillPanel(props: PanelProps) {
   const { lines, totals, unitCount, setQty, setDiscount, showCustomer, setShowCustomer, customerName,
     setCustomerName, customerPhone, setCustomerPhone, buyerGstin, setBuyerGstin, paymentMode,
-    staff, staffUserId, setStaffUserId,
+    staff, staffId, setStaffId,
     setPaymentMode, error, pending, complete } = props;
 
   return (
@@ -423,17 +424,26 @@ function BillPanel(props: PanelProps) {
             className="text-xs font-semibold text-velvet active:text-velvet-dark">+ Add customer details</button>
         )}
 
-        {/* Who gets the credit. Always answered — "Counter" is a real choice
-            meaning a walk-in nobody in particular attended, not a skipped
-            field. Chips rather than a dropdown: one tap at a busy till. */}
+        {/* Who is RESPONSIBLE for the sale, which is not necessarily who rang
+            it up — a stylist who recommended the product, the manager, or the
+            counter itself. Internal attribution for commission and reporting:
+            it is deliberately never printed on the customer's invoice, which
+            carries the billing operator under "Sold by" instead.
+
+            Always answered: "Counter" is a real choice meaning nobody in
+            particular is owed credit, so that stays distinguishable from a
+            cashier skipping the step. Chips rather than a dropdown — one tap
+            during a queue. */}
         {staff.length > 0 && (
           <div>
-            <div className="text-[11px] uppercase tracking-[0.12em] text-faint mb-1.5">Served by</div>
+            <div className="text-[11px] uppercase tracking-[0.12em] text-faint mb-1.5">
+              Sale credited to
+            </div>
             <div className="flex flex-wrap gap-1.5">
               <button
-                onClick={() => setStaffUserId(null)}
+                onClick={() => setStaffId(null)}
                 className={`h-9 px-3 rounded-lg text-xs font-semibold border transition-colors select-none ${
-                  staffUserId === null
+                  staffId === null
                     ? "bg-velvet text-on-velvet border-velvet"
                     : "border-line text-muted active:bg-velvet-soft"
                 }`}
@@ -442,10 +452,11 @@ function BillPanel(props: PanelProps) {
               </button>
               {staff.map((m) => (
                 <button
-                  key={m.userId}
-                  onClick={() => setStaffUserId(m.userId)}
+                  key={m.id}
+                  onClick={() => setStaffId(m.id)}
+                  title={m.title ?? undefined}
                   className={`h-9 px-3 rounded-lg text-xs font-semibold border transition-colors select-none ${
-                    staffUserId === m.userId
+                    staffId === m.id
                       ? "bg-velvet text-on-velvet border-velvet"
                       : "border-line text-muted active:bg-velvet-soft"
                   }`}

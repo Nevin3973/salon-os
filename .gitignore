@@ -44,3 +44,6 @@ next-env.d.ts
 
 # Database dumps — real sales and customer data. Never commit these.
 /backups/
+
+# Local editor/tooling config
+.claude/

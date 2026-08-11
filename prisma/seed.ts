@@ -307,6 +307,35 @@ async function seedOrg(opts: {
   });
   console.log(`  ADMIN ${opts.adminName} <${adminEmail}>`);
 
+  // The staff roster: who can be credited with a sale.
+  //
+  // Deliberately includes stylists who have NO login. That is the whole point
+  // of Staff being separate from User — a salon credits the stylist who
+  // brought the sale, and inventing an email and password for every one of
+  // them would be busywork and an access surface nobody asked for.
+  const stylistNames = ["Meera R.", "Anjali T.", "Farah S.", "Divya K.", "Ritu P.", "Nisha B."];
+  let stylistIdx = 0;
+  for (let i = 0; i < branches.length; i++) {
+    // The manager sells too, and is linked to their login.
+    await prisma.staff.create({
+      data: {
+        orgId: org.id,
+        branchId: branches[i].id,
+        name: opts.pmNames[i],
+        title: "Salon Manager",
+        userId: pmUsers[i]?.id ?? null,
+      },
+    });
+    // Two stylists per branch, no accounts.
+    for (let k = 0; k < 2; k++) {
+      const name = stylistNames[stylistIdx++ % stylistNames.length];
+      await prisma.staff.create({
+        data: { orgId: org.id, branchId: branches[i].id, name, title: "Stylist" },
+      });
+    }
+  }
+  console.log(`  STAFF ${branches.length * 3} on the roster (managers + stylists, stylists have no login)`);
+
   // A default delivery address per branch so checkout works immediately.
   const addresses = [];
   for (let i = 0; i < branches.length; i++) {
@@ -689,6 +718,7 @@ const TENANT_TABLES = [
   "AuditLogEntry", "Address", "OrderItem", "OrderItemDelivery",
   "BranchStock", "BranchStockMovement", "Sale", "SaleItem",
   "InvoiceSeries", "SaleReturn", "SaleReturnItem",
+  "Customer", "Staff",
 ] as const;
 
 /**

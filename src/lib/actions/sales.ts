@@ -44,12 +44,13 @@ const recordSchema = z.object({
   customerName: z.string().trim().max(120).optional(),
   customerPhone: z.string().trim().max(20).optional(),
   /**
-   * Who gets credit for the sale. Null means the counter itself — a walk-in
-   * nobody in particular attended. Kept explicit rather than left blank so
-   * "nobody is owed commission for this" and "the cashier skipped the step"
-   * are the same recorded decision rather than indistinguishable silence.
+   * Which Staff record is credited with the sale — the person responsible for
+   * it, not necessarily whoever operated the till. Null means the counter
+   * itself: a walk-in nobody in particular is owed credit for. Kept explicit
+   * rather than left blank so "nobody is owed commission" and "the cashier
+   * skipped the step" are not the same silence.
    */
-  staffUserId: z.string().min(1).nullable().optional(),
+  staffId: z.string().min(1).nullable().optional(),
   buyerGstin: z
     .string()
     .trim()
@@ -115,7 +116,7 @@ export async function recordSale(input: {
   customerPhone?: string;
   buyerGstin?: string;
   paymentMode: (typeof PAYMENT_MODES)[number];
-  staffUserId?: string | null;
+  staffId?: string | null;
 }): Promise<SaleResult> {
   const parsed = recordSchema.safeParse(input);
   if (!parsed.success) {
@@ -126,22 +127,32 @@ export async function recordSale(input: {
   const branchId = session.locationId;
   if (!branchId) return { ok: false, error: "Your account is not assigned to a branch." };
 
-  // Credit may only go to someone who actually works at this branch. Without
-  // this check the id arrives straight from the browser, and a crafted request
-  // could attribute a sale — and any commission on it — to anyone at all,
-  // including a member of a different tenant.
+  // Credit may only go to an active staff member of THIS org, working either
+  // at this branch or across branches. The id arrives straight from the
+  // browser, so without this check a crafted request could attribute a sale —
+  // and any commission on it — to anyone at all, including someone belonging
+  // to a different tenant.
+  //
+  // Runs inside withOrg: Staff is behind FORCE row-level security, so the bare
+  // client has no `app.org_id` and every lookup comes back empty — which read
+  // as "that person isn't at this branch" for staff who plainly were. Membership
+  // can be queried unscoped because it is deliberately RLS-exempt; Staff is not,
+  // and the two are easy to confuse.
   let staffId: string | null = null;
-  if (parsed.data.staffUserId) {
-    const member = await prisma.membership.findFirst({
-      where: {
-        userId: parsed.data.staffUserId,
-        orgId: session.orgId,
-        locationId: branchId,
-      },
-      select: { userId: true },
-    });
+  if (parsed.data.staffId) {
+    const member = await withOrg(session.orgId, (tx) =>
+      tx.staff.findFirst({
+        where: {
+          id: parsed.data.staffId!,
+          orgId: session.orgId,
+          isActive: true,
+          OR: [{ branchId }, { branchId: null }],
+        },
+        select: { id: true },
+      })
+    );
     if (!member) return { ok: false, error: "That staff member isn't at this branch." };
-    staffId = member.userId;
+    staffId = member.id;
   }
 
   // Collapse duplicate product lines so a product can't be split to dodge the
@@ -197,7 +208,7 @@ export async function recordSale(input: {
           // whole bill. Crediting individual products to different staff later
           // is then a UI change rather than a migration of history that cannot
           // be reconstructed.
-          staffUserId: staffId,
+          staffId,
         };
       });
       const totals = billTotals(
