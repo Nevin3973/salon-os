@@ -1,0 +1,77 @@
+# Mirrors main to the organisation's repository, which is what deploys.
+#
+# Development happens in the personal repo. DigitalOcean's GitHub integration is
+# authorised for the infynixengine organisation, not a personal account, so the
+# App Platform app watches infynixengine/salon-os — a fork of this repository.
+# Without this workflow the two drift apart silently: a push here succeeds, the
+# fork stays where it was, and production keeps serving whatever it built last.
+# That is exactly what happened on 11 Aug 2026, and the only visible symptom was
+# that new features never appeared.
+#
+# Requires one repository secret:
+#   ORG_MIRROR_TOKEN — a fine-grained personal access token with
+#                      Contents: read and write on infynixengine/salon-os
+#
+# The mirror is deliberately one-directional. Treat the org repo as a deployment
+# artefact, never as a place to commit: anything pushed there directly will be
+# overwritten by the next mirror run without warning.
+name: Mirror to org
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+# One mirror at a time. Two overlapping runs could push out of order and leave
+# the org repo on an older commit than this one.
+concurrency:
+  group: mirror-to-org
+  cancel-in-progress: false
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out full history
+        uses: actions/checkout@v4
+        with:
+          # The default shallow clone cannot be pushed as a complete branch, and
+          # a force-push from a truncated history would discard commits on the
+          # far side.
+          fetch-depth: 0
+
+      - name: Push to the organisation repository
+        env:
+          TOKEN: ${{ secrets.ORG_MIRROR_TOKEN }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "::error::ORG_MIRROR_TOKEN is not set. The org repo will not receive this commit,"
+            echo "::error::and production will keep serving whatever it built last."
+            exit 1
+          fi
+
+          git remote add org "https://x-access-token:${TOKEN}@github.com/infynixengine/salon-os.git"
+
+          # --force, not --force-with-lease: the lease compares against a remote
+          # ref this runner has never fetched, so it can only ever refuse. The
+          # org repo is a deployment target with no independent history, which
+          # is what makes an unconditional overwrite the correct behaviour here
+          # rather than a dangerous one.
+          git push --force org "HEAD:refs/heads/main"
+
+      - name: Confirm the org repo now matches
+        env:
+          TOKEN: ${{ secrets.ORG_MIRROR_TOKEN }}
+        run: |
+          # A push that reported success but left the branch elsewhere would
+          # mean production silently keeps building the old commit — worth one
+          # extra call to rule out.
+          REMOTE=$(git ls-remote "https://x-access-token:${TOKEN}@github.com/infynixengine/salon-os.git" refs/heads/main | cut -f1)
+          LOCAL=$(git rev-parse HEAD)
+          echo "org main: $REMOTE"
+          echo "this run: $LOCAL"
+          if [ "$REMOTE" != "$LOCAL" ]; then
+            echo "::error::Mirror did not take — org repo is on $REMOTE, expected $LOCAL."
+            exit 1
+          fi
+          echo "Mirrored. DigitalOcean will deploy from this commit."
