@@ -71,6 +71,13 @@ export async function GET() {
     service: PRODUCT_NAME,
     status: healthy ? "ok" : "degraded",
     environment: process.env.NODE_ENV ?? "development",
+    // Stamped into the image at build time. Registry deploys carry no link back
+    // to a commit, so without this the only way to identify a running build is
+    // to grep the served HTML for strings you know are new.
+    version: {
+      commit: process.env.APP_GIT_SHA ?? "unknown",
+      builtAt: process.env.APP_BUILT_AT ?? "unknown",
+    },
     checks,
   };
   const status = healthy ? 200 : 503;

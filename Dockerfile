@@ -34,6 +34,18 @@ RUN npx prisma generate && npm run build
 FROM node:20-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
+
+# Which commit this image was built from.
+#
+# Registry deploys carry no link back to a commit — DigitalOcean shows an image
+# digest and nothing else — so without this the only way to tell what is running
+# is to grep the served HTML for strings you happen to know are new. That is
+# forensics, not operations. Passed in at build time and surfaced on
+# /api/health, so "what is deployed?" is one request.
+ARG GIT_SHA=unknown
+ARG BUILT_AT=unknown
+ENV APP_GIT_SHA=$GIT_SHA
+ENV APP_BUILT_AT=$BUILT_AT
 # Bind to every interface: App Platform reaches the container from outside.
 ENV HOSTNAME=0.0.0.0
 ENV PORT=8080
