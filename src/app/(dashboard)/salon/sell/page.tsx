@@ -45,6 +45,10 @@ export default async function SellPage() {
     .filter(
       (s) =>
         s.product.active &&
+        // Marked sellable by an admin, not merely "happens to have a price".
+        // Price alone used to decide this, and the seed priced everything, so
+        // developer and floor cleaner were rung up as retail lines.
+        s.product.sellRetail &&
         s.product.retailPriceCents > 0 &&
         !hidden.has(s.product.category)
     )

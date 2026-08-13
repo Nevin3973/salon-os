@@ -10,6 +10,7 @@ import {
 } from "@/lib/actions/admin";
 import { formatMoney, parseMoneyToMinor } from "@/lib/money";
 import { ProductImageCell } from "./image-upload";
+import { ChannelCell } from "./channel-cell";
 
 const GST_RATES = [0, 5, 12, 18, 28];
 
@@ -29,6 +30,8 @@ type Row = {
   binLocation: string | null;
   imageUrl: string | null;
   active: boolean;
+  sellRetail: boolean;
+  salonUse: boolean;
 };
 
 const inputCls =
@@ -77,6 +80,7 @@ export function ProductsTable({ products, categories }: { products: Row[]; categ
               <th className="font-medium px-4 py-3">SKU</th>
               <th className="font-medium px-4 py-3">Product</th>
               <th className="font-medium px-4 py-3">Category</th>
+              <th className="font-medium px-4 py-3">Sold where</th>
               <th className="font-medium px-4 py-3">Barcode / Bin</th>
               <th className="font-medium px-4 py-3 text-right">Cost</th>
               <th className="font-medium px-4 py-3 text-right">Retail (GST)</th>
@@ -97,6 +101,9 @@ export function ProductsTable({ products, categories }: { products: Row[]; categ
                   <div className="text-xs text-faint">{p.brand} · per {p.unit}</div>
                 </td>
                 <td className="px-4 py-3 text-muted">{p.category}</td>
+                <td className="px-4 py-3">
+                  <ChannelCell productId={p.id} sellRetail={p.sellRetail} salonUse={p.salonUse} />
+                </td>
                 <td className="px-4 py-3"><IdentifiersCell row={p} /></td>
                 <td className="px-4 py-3 text-right tabular-nums">{formatMoney(p.priceCents)}</td>
                 <td className="px-4 py-3 text-right"><RetailCell row={p} /></td>

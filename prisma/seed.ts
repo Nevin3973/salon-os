@@ -17,6 +17,31 @@ function categoryGst(category: string): number {
   return low[category] ?? 18;
 }
 
+/**
+ * Which side of the business a category belongs to.
+ *
+ * Both flags are independent because plenty of stock is genuinely both: a
+ * litre of shampoo is used at the basin AND sold off the shelf. The default is
+ * salon-use, which is the safe direction — a consumable wrongly hidden from the
+ * till is a nuisance, whereas bleach powder or floor cleaner offered to a
+ * walk-in customer is a real mistake. Every product used to carry a retail
+ * price, which is exactly how the till ended up listing developer and
+ * disinfectant.
+ */
+function channelFor(category: string): { sellRetail: boolean; salonUse: boolean } {
+  switch (category) {
+    case "Retail Products":
+      return { sellRetail: true, salonUse: false };
+    case "Hair Care":
+    case "Skin Care":
+    case "Nail Care":
+    case "Hair Treatments":
+      return { sellRetail: true, salonUse: true };
+    default:
+      return { sellRetail: false, salonUse: true };
+  }
+}
+
 /** A plausible HSN code per category for the tax invoice. */
 function categoryHsn(category: string): string {
   const map: Record<string, string> = {
@@ -245,13 +270,17 @@ async function seedOrg(opts: {
   const products = await Promise.all(
     opts.products.map((p) => {
       const priceCents = seedPriceMinor(p.name, p.category);
+      const channel = channelFor(p.category);
       return prisma.product.create({
         data: {
           ...p,
+          ...channel,
           orgId: org.id,
           imageUrl: productImageUrl(p.name, p.category),
           priceCents,
-          retailPriceCents: retailPriceMinor(priceCents),
+          // Only sellable stock carries a customer price. A retail price on a
+          // back-bar-only product is meaningless and would overstate shelf value.
+          retailPriceCents: channel.sellRetail ? retailPriceMinor(priceCents) : 0,
           gstRate: categoryGst(p.category),
           hsn: categoryHsn(p.category),
           barcode: eanFor(`${opts.slug}:${p.sku}`),

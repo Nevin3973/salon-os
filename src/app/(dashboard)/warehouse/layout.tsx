@@ -1,5 +1,6 @@
 import { requireScopedSession, activeOrgBranding } from "@/lib/tenant";
 import { OpsShell } from "@/components/ops-shell";
+import { appVersion } from "@/lib/version";
 
 export default async function WarehouseLayout({ children }: { children: React.ReactNode }) {
   const { session, db } = await requireScopedSession("WAREHOUSE_MANAGER");
@@ -25,6 +26,7 @@ export default async function WarehouseLayout({ children }: { children: React.Re
         userName={session.name}
         orgName={org.name}
         orgLogoUrl={org.logoUrl}
+        version={appVersion().commit}
         items={[
           { label: "Order queue", href: "/warehouse/queue", icon: "queue", badge: queueCount || undefined },
           { label: "Pending supplies", href: "/warehouse/outstanding", icon: "clock", badge: outstandingCount || undefined },

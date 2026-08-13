@@ -92,6 +92,12 @@ export const authConfig: NextAuthConfig = {
         // Uptime monitors must reach this without credentials. It reports
         // posture (backend names, booleans) and never any tenant data.
         pathname === "/api/health" ||
+        // The nightly backup job reports here. It is a CI runner with no login,
+        // so a session check would make the endpoint unreachable and the
+        // backup history permanently empty. It carries its own bearer-token
+        // check and refuses everything when that token is unset, so opening it
+        // here does not open it to the world.
+        pathname === "/api/backups" ||
         pathname.startsWith("/api/auth");
       if (isPublic) return true;
       if (!isLoggedIn) return false;

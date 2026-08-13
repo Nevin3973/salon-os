@@ -30,6 +30,10 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - name: Note the start time
+        id: t
+        run: echo "at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
       - name: Install doctl
         uses: digitalocean/action-doctl@v2
         with:
@@ -78,6 +82,7 @@ jobs:
             postgres:17 bash scripts/backup.sh ./backups
 
       - name: Verify the dump is readable before trusting it
+        id: verify
         run: |
           DUMP=$(ls -1t backups/salonos-*.dump | head -1)
           # A dump that cannot be listed is not a backup. This is the same
@@ -90,6 +95,8 @@ jobs:
             echo "::error::Dump has only $OBJECTS objects — refusing to call this a backup."
             exit 1
           fi
+          echo "size=$(stat -c%s "$DUMP")" >> "$GITHUB_OUTPUT"
+
 
       - name: Upload
         uses: actions/upload-artifact@v4
@@ -146,4 +153,38 @@ jobs:
             echo "::error::cannot reach its database. Restore it immediately with:"
             echo "::error::  doctl databases firewalls append <cluster> --rule app:<app-id>"
             exit 1
+          fi
+
+      - name: Report the outcome to the app
+        # `always()`, and it reports FAILURES as well as successes. A backup that
+        # silently stops is the failure mode this project has actually suffered:
+        # four consecutive nights failed and nothing said so. Because both
+        # outcomes are recorded, a gap in the history in Admin -> System means
+        # the job did not run at all, which is as informative as a red row.
+        #
+        # Never fails the job. A working backup that could not phone home is
+        # still a working backup, and turning it red would train people to
+        # ignore red. The app catches a broken reporter from the other side —
+        # it warns when no successful backup has been recorded recently — so
+        # neither piece has to be trusted on its own.
+        if: always()
+        env:
+          TOKEN: ${{ secrets.BACKUP_REPORT_TOKEN }}
+          REPORT_URL: ${{ secrets.BACKUP_REPORT_URL }}
+          STARTED: ${{ steps.t.outputs.at }}
+          SIZE: ${{ steps.verify.outputs.size }}
+          RESULT: ${{ job.status }}
+        run: |
+          if [ -z "$TOKEN" ] || [ -z "$REPORT_URL" ]; then
+            echo "::warning::BACKUP_REPORT_TOKEN or BACKUP_REPORT_URL is unset — outcome not recorded."
+            exit 0
+          fi
+          if [ "$RESULT" = "success" ]; then OK=true; else OK=false; fi
+          if [ -n "$SIZE" ]; then SIZE_JSON="$SIZE"; else SIZE_JSON=null; fi
+          MSG="job $RESULT"
+          BODY=$(printf '{"source":"github-actions","ok":%s,"startedAt":"%s","sizeBytes":%s,"message":"%s","commit":"%s"}'             "$OK" "$STARTED" "$SIZE_JSON" "$MSG" "${GITHUB_SHA:0:7}")
+          if curl -fsS --max-time 30 -X POST "$REPORT_URL/api/backups"                -H "Authorization: Bearer $TOKEN"                -H "Content-Type: application/json"                -d "$BODY" >/dev/null; then
+            echo "Reported: $MSG"
+          else
+            echo "::warning::Could not report the backup outcome to the app."
           fi

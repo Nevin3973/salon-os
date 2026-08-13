@@ -464,69 +464,51 @@ textarea:focus-visible {
 
 /* ═══════════════════════════════════════════════════════════
    SIGN-IN ARTWORK
-   Salon tools — shears, sprayer, comb — assembling as the
-   page loads. CSS only; no JavaScript on the path to signing
-   in. The entrances are one-shot; only the snip, the mist and
-   the motes loop, all of them slow and well away from the
-   form, so nothing tugs at the eye while someone types a
-   password.
+   Concentric rings with arcs turning slowly at different
+   rates. Abstract on purpose: no object to recognise, so
+   nothing to get wrong. CSS only; no JavaScript on the path
+   to signing in. The rotations are minutes long and sit well
+   away from the form, so nothing tugs at the eye while
+   someone types a password.
    ═══════════════════════════════════════════════════════════ */
 
-/* The shears.
+/* Rings and arcs.
 
-   Two animations run on each arm at once, and they are split by PROPERTY on
-   purpose: the entrance animates only `opacity` and the snip only `transform`.
-   Where two running animations touch the same property the last one wins, so
-   an entrance that also moved the arm would fight the snip and one of the two
-   would be silently dropped.
+   Each arc runs two animations at once, split by PROPERTY on purpose: the
+   entrance animates only `opacity` and the rotation only `transform`. Where two
+   running animations touch the same property the last one wins, so an entrance
+   that also moved the element would fight the spin and one of the two would be
+   silently dropped.
 
-   `transform-origin: 0 0` is the rivet: the parent group's translate puts the
-   local origin there, so each arm turns about the pin exactly as real shears
-   do. Without it SVG resolves the origin against the viewport corner and the
-   arms swing in from off-screen. */
-.login-art .shear {
+   `transform-origin: 0 0` is the composition's centre: the parent group's
+   translate puts each child's local origin there, so they turn about the middle
+   rather than about the viewport corner. Without it SVG resolves the origin
+   against the top-left and the rings swing across the screen. */
+.login-art .rings,
+.login-art .ticks {
+  opacity: 0;
+  animation: art-fade 1.6s ease-out 0.35s forwards;
+}
+
+.login-art .arc,
+.login-art .orbit {
   opacity: 0;
   transform-origin: 0 0;
-  animation:
-    art-fade 1.1s ease-out 0.3s forwards,
-    shear-snip-a 4.2s ease-in-out 1.3s infinite;
 }
-/* Arms open in opposite directions. The resting angle is repeated as the
-   animation's own 0% frame so nothing jumps when the loop takes over. */
-.login-art .shear-a { transform: rotate(7deg); }
-.login-art .shear-b {
-  transform: rotate(-7deg);
-  animation-name: art-fade, shear-snip-b;
-}
+/* Deliberately slow, deliberately coprime-ish periods: nothing lines back up
+   into a repeating pattern the eye can lock onto while someone reads the form.
+   Alternating direction keeps it from reading as one object turning. */
+.login-art .arc-1 { animation: art-fade 1.4s ease-out 0.50s forwards, art-spin 64s linear infinite; }
+.login-art .arc-2 { animation: art-fade 1.4s ease-out 0.62s forwards, art-spin-rev 89s linear infinite; }
+.login-art .arc-3 { animation: art-fade 1.4s ease-out 0.74s forwards, art-spin 127s linear infinite; }
+.login-art .arc-4 { animation: art-fade 1.4s ease-out 0.86s forwards, art-spin-rev 151s linear infinite; }
 
-.login-art .rivet {
-  opacity: 0;
-  animation: art-fade 1.1s ease-out 0.55s forwards;
-}
-
-/* Sprayer and comb simply arrive and stay put — two moving things on one
-   screen is company, three is a distraction while someone types a password. */
-.login-art .tool {
-  opacity: 0;
-  animation: art-tool-in 1s cubic-bezier(0.22, 1, 0.36, 1) forwards;
-}
-.login-art .tool-sprayer { animation-delay: 0.7s; }
-.login-art .tool-comb { animation-delay: 0.9s; }
-
-/* Mist leaves the nozzle, expands and fades. Staggered by negative delays so
-   the four particles are already mid-flight on first paint rather than
-   launching in a single volley. */
-.login-art .mist {
-  opacity: 0;
-  animation: mist-puff 5s ease-out 1.6s infinite;
-}
-.login-art .mist-2 { animation-duration: 6.2s; animation-delay: -0.6s; }
-.login-art .mist-3 { animation-duration: 5.6s; animation-delay: -2.4s; }
-.login-art .mist-4 { animation-duration: 6.8s; animation-delay: -3.8s; }
+.login-art .orbit-1 { animation: art-fade 1.4s ease-out 0.95s forwards, art-spin 43s linear infinite; }
+.login-art .orbit-2 { animation: art-fade 1.4s ease-out 1.05s forwards, art-spin-rev 31s linear infinite; }
 
 .login-art .art-glow {
   opacity: 0;
-  animation: art-fade 2.4s ease-out 0.5s forwards;
+  animation: art-fade 2.4s ease-out 0.4s forwards;
 }
 
 /* Slow drift, so the screen feels alive rather than frozen — small enough to
@@ -536,27 +518,12 @@ textarea:focus-visible {
 }
 .login-art .mote-2 { animation-duration: 12s; animation-delay: -3s; }
 .login-art .mote-3 { animation-duration: 10.5s; animation-delay: -6s; }
-.login-art .mote-4 { animation-duration: 13s; animation-delay: -1.5s; }
 
-/* One unhurried snip per cycle: hold open, close, reopen. */
-@keyframes shear-snip-a {
-  0%, 62%, 100% { transform: rotate(7deg); }
-  74%           { transform: rotate(0deg); }
-  86%           { transform: rotate(7deg); }
+@keyframes art-spin {
+  to { transform: rotate(360deg); }
 }
-@keyframes shear-snip-b {
-  0%, 62%, 100% { transform: rotate(-7deg); }
-  74%           { transform: rotate(0deg); }
-  86%           { transform: rotate(-7deg); }
-}
-@keyframes art-tool-in {
-  from { opacity: 0; transform: translateY(18px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-@keyframes mist-puff {
-  0%   { opacity: 0; transform: translate(0, 0) scale(0.6); }
-  18%  { opacity: 0.45; }
-  100% { opacity: 0; transform: translate(-44px, -56px) scale(1.6); }
+@keyframes art-spin-rev {
+  to { transform: rotate(-360deg); }
 }
 @keyframes art-fade {
   to { opacity: 1; }
@@ -583,9 +550,10 @@ textarea:focus-visible {
 /* Motion is decoration here; it must never be the reason someone feels
    unwell. Everything lands in its finished state instead. */
 @media (prefers-reduced-motion: reduce) {
-  .login-art .shear,
-  .login-art .rivet,
-  .login-art .tool,
+  .login-art .rings,
+  .login-art .ticks,
+  .login-art .arc,
+  .login-art .orbit,
   .login-art .art-glow,
   .login-art .mote,
   .login-panel,
@@ -594,17 +562,6 @@ textarea:focus-visible {
     opacity: 1;
     transform: none;
   }
-  /* Mist is motion by definition — there is no still frame of it worth
-     showing, so it is simply absent rather than frozen mid-flight. */
-  .login-art .mist {
-    animation: none !important;
-    opacity: 0;
-  }
-  /* Rest the shears open rather than letting `transform: none` snap them shut.
-     Same specificity as the reset above, so source order decides — these must
-     stay below it. */
-  .login-art .shear-a { transform: rotate(7deg); }
-  .login-art .shear-b { transform: rotate(-7deg); }
 }
 
 /* ═══════════════════════════════════════════════════════════

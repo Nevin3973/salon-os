@@ -33,6 +33,8 @@ export default async function AdminProductsPage() {
           binLocation: p.binLocation,
           imageUrl: p.imageUrl,
           active: p.active,
+          sellRetail: p.sellRetail,
+          salonUse: p.salonUse,
         }))}
         categories={categories}
       />

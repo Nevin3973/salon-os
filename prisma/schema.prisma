@@ -58,6 +58,36 @@ model Org {
   staff                Staff[]
 }
 
+/**
+ * Outcome of one off-site backup attempt, reported by the nightly job.
+ *
+ * Deliberately NOT tenant-scoped: a backup covers the whole cluster, not one
+ * org, so it carries no orgId and is not in SCOPED_MODELS. Only super-admins
+ * ever read it.
+ *
+ * FAILURES ARE RECORDED, not just successes. A table that only ever gets a row
+ * when things go well cannot be told apart from a job that stopped running —
+ * which is exactly how four consecutive failed backups went unnoticed.
+ */
+model BackupRun {
+  id         String   @id @default(cuid())
+  /// What produced it, e.g. "github-actions". Leaves room for a second,
+  /// independent job later without the two being confused for each other.
+  source     String
+  startedAt  DateTime
+  finishedAt DateTime @default(now())
+  ok         Boolean
+  /// Dump size in bytes. Null on failure, and a sudden drop on success is the
+  /// earliest sign of a backup that "worked" but captured nothing.
+  sizeBytes  Int?
+  /// Failing step or error summary. Never contains a connection string.
+  message    String?
+  /// Commit the job ran from, so a broken backup can be tied to a change.
+  commit     String?
+
+  @@index([finishedAt])
+}
+
 enum LocationType {
   BRANCH
   WAREHOUSE
@@ -218,6 +248,13 @@ model Product {
   gstRate          Int     @default(0)
   /// HSN code printed on the customer's tax invoice.
   hsn              String?
+
+  /// Sold to walk-in customers. Gates the till and the retail half of branch
+  /// inventory, so a back-bar-only product cannot be rung up by mistake.
+  sellRetail       Boolean @default(false)
+  /// Consumed during services — back bar, consumables, tools, equipment.
+  /// Shown in the salon-use half of branch inventory.
+  salonUse         Boolean @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

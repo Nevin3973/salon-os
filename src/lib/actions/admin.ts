@@ -55,6 +55,8 @@ const productSchema = z.object({
   retailPriceCents: z.number().int().min(0).max(100_000_000).optional(),
   gstRate: z.number().int().refine((n) => (GST_RATES as readonly number[]).includes(n), "Pick a valid GST rate.").optional(),
   hsn: z.string().trim().max(12).optional(),
+  sellRetail: z.boolean().optional(),
+  salonUse: z.boolean().optional(),
 });
 
 export async function createProduct(input: {
@@ -69,6 +71,8 @@ export async function createProduct(input: {
   retailPriceCents?: number;
   gstRate?: number;
   hsn?: string;
+  sellRetail?: boolean;
+  salonUse?: boolean;
 }): Promise<AdminResult> {
   const parsed = productSchema.safeParse(input);
   if (!parsed.success) {
@@ -154,6 +158,55 @@ export async function setProductImage(input: {
 
   revalidatePath("/admin/products");
   revalidatePath("/purchase-manager/catalogue");
+  return { ok: true };
+}
+
+/**
+ * Which side of the business a product belongs to.
+ *
+ * Both flags are independent, and both may be false — a product can legitimately
+ * be neither while someone is still setting it up. Rather than forbid that, the
+ * branch inventory surfaces the unclassified ones in their own section, so a
+ * product can never quietly disappear from every screen.
+ */
+export async function setProductChannel(input: {
+  productId: string;
+  sellRetail: boolean;
+  salonUse: boolean;
+}): Promise<AdminResult> {
+  const parsed = z
+    .object({
+      productId: z.string().min(1),
+      sellRetail: z.boolean(),
+      salonUse: z.boolean(),
+    })
+    .safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid selection." };
+
+  const { session, db } = await requireVerifiedScopedSession("SUPER_ADMIN");
+  const product = await db.product.findFirst({ where: { id: parsed.data.productId } });
+  if (!product) return { ok: false, error: "Product not found." };
+
+  await db.product.update({
+    where: { id: product.id },
+    data: { sellRetail: parsed.data.sellRetail, salonUse: parsed.data.salonUse },
+  });
+  const where = [
+    parsed.data.sellRetail ? "sale" : null,
+    parsed.data.salonUse ? "salon use" : null,
+  ].filter(Boolean);
+  await logAudit(prisma, {
+    orgId: session.orgId,
+    userId: session.userId,
+    userName: session.name,
+    action: `Set ${product.name} for ${where.length ? where.join(" and ") : "neither list"}`,
+    entityType: "Product",
+    entityId: product.id,
+  });
+
+  revalidatePath("/admin/products");
+  revalidatePath("/salon/inventory");
+  revalidatePath("/salon/sell");
   return { ok: true };
 }
 

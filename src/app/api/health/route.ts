@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db";
 import { limiterBackend } from "@/lib/rate-limit";
 import { observabilityEnabled } from "@/lib/observability";
 import { PRODUCT_NAME } from "@/lib/brand";
+import { appVersion } from "@/lib/version";
 
 /**
  * Deployment health and readiness.
@@ -74,10 +75,7 @@ export async function GET() {
     // Stamped into the image at build time. Registry deploys carry no link back
     // to a commit, so without this the only way to identify a running build is
     // to grep the served HTML for strings you know are new.
-    version: {
-      commit: process.env.APP_GIT_SHA ?? "unknown",
-      builtAt: process.env.APP_BUILT_AT ?? "unknown",
-    },
+    version: appVersion(),
     checks,
   };
   const status = healthy ? 200 : 503;

@@ -29,7 +29,7 @@ export const VENDOR_DOMAIN = "beyonddemands.in";
  * a two-line lockup (mark above, this below) and a one-line lockup can share
  * the same words and never drift apart.
  */
-export const PRODUCT_TAGLINE = `an ${PARENT_NAME} product`;
+export const PRODUCT_TAGLINE = "an Infynix Growth Solution";
 
 /** One-line lockup for anywhere a stacked mark will not fit. */
 export const PRODUCT_LOCKUP = `${PRODUCT_NAME} — ${PRODUCT_TAGLINE}`;
@@ -47,7 +47,7 @@ export const ATTRIBUTION = PRODUCT_TAGLINE;
 export const WORDMARK = { first: "Salon", second: "OS" } as const;
 
 /** Browser tab / metadata title. */
-export const APP_TITLE = `${PRODUCT_NAME} — salon supply & retail`;
+export const APP_TITLE = `${PRODUCT_NAME} — ${PRODUCT_TAGLINE}`;
 
 /** Public origin, used in emails and absolute links. */
 export function appUrl(): string {
