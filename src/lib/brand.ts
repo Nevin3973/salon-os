@@ -16,6 +16,9 @@ export const PRODUCT_NAME = "Salon OS";
 /** The company behind it. */
 export const VENDOR_NAME = "Beyond Demands";
 
+/** The parent business, shown as an attribution line. */
+export const PARENT_LINE = "Growth Solutions by Infynix Solutions";
+
 /** Marketing/site domain. */
 export const VENDOR_DOMAIN = "beyonddemands.in";
 
@@ -24,6 +27,9 @@ export const VENDOR_LINE = `from ${VENDOR_NAME}`;
 
 /** Long form for document footers, e.g. the printed invoice. */
 export const POWERED_BY = `${PRODUCT_NAME} · ${VENDOR_NAME}`;
+
+/** Attribution for the sign-in screen and app footer. */
+export const ATTRIBUTION = PARENT_LINE;
 
 /**
  * The two halves of the wordmark, so the UI can colour the second one.

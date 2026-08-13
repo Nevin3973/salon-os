@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
+import { ATTRIBUTION } from "@/lib/brand";
 
 export type OpsNavItem = {
   label: string;
@@ -161,6 +162,11 @@ export function OpsShell({
       >
         Sign out
       </button>
+      {/* Maker's mark. Deliberately quiet — this sits on screens a salon's own
+          customers can see, so it should not compete with their branding. */}
+      <p className="attribution text-[10px] text-center mt-3 leading-tight">
+        {ATTRIBUTION}
+      </p>
     </div>
   );
 

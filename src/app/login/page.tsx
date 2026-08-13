@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
 import Link from "next/link";
 import { LoginArt } from "@/components/login-art";
+import { ATTRIBUTION } from "@/lib/brand";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -37,7 +38,7 @@ export default function LoginPage() {
           <p className="font-display text-2xl text-ink/90 leading-snug max-w-sm">
             Everything your salon sells, stocks and bills — in one place.
           </p>
-          <p className="text-muted text-sm mt-2">Beyond Demands</p>
+          <p className="attribution text-sm mt-2">{ATTRIBUTION}</p>
         </div>
       </div>
 
@@ -94,7 +95,10 @@ export default function LoginPage() {
           </form>
         </div>
       </div>
-      <p className="text-center text-faint text-xs pb-6">Salon OS · from Beyond Demands</p>
+      <p className="text-center text-xs pb-6">
+        <span className="text-faint">Salon OS · </span>
+        <span className="attribution">{ATTRIBUTION}</span>
+      </p>
     </div>
   );
 }

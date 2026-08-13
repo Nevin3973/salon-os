@@ -556,3 +556,28 @@ textarea:focus-visible {
     transform: none;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════
+   VENDOR ATTRIBUTION
+   "Growth Solutions by Infynix Solutions" — teal, deliberately
+   quiet. It appears on sign-in and in the app footer, where it
+   should read as a maker's mark rather than compete with the
+   salon's own branding on screens their customers may see.
+   Two tones so it stays legible on both the light storefront
+   and the dark console.
+   ═══════════════════════════════════════════════════════════ */
+
+:root {
+  --color-teal: #0d9488;
+}
+.theme-ops,
+.theme-analytics {
+  /* Lifted for contrast against the near-black console. */
+  --color-teal: #2dd4bf;
+}
+
+.attribution {
+  color: var(--color-teal);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
