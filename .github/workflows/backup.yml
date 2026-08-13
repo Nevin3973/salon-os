@@ -103,10 +103,47 @@ jobs:
         # `always()` on purpose: a failed dump must not leave the database
         # reachable from a runner IP that someone else will hold tomorrow.
         if: always()
+        env:
+          RUNNER_IP: ${{ steps.fw.outputs.ip }}
         run: |
-          RULE=$(doctl databases firewalls list "${{ secrets.DO_DATABASE_CLUSTER_ID }}" \
-            --no-header --format UUID,Value | grep "${{ steps.fw.outputs.ip }}" | cut -f1 | head -1)
-          if [ -n "$RULE" ]; then
-            doctl databases firewalls remove "${{ secrets.DO_DATABASE_CLUSTER_ID }}" --uuid "$RULE"
-            echo "Removed firewall rule for ${{ steps.fw.outputs.ip }}"
+          # Match on the exact rule via JSON, never by grepping formatted text.
+          #
+          # The first version of this did `... --format UUID,Value | grep "$IP"
+          # | cut -f1`. Two faults compounded: cut splits on tabs by default
+          # while doctl pads with spaces, so it returned whole lines rather
+          # than UUIDs; and an empty $IP made grep match every row. It deleted
+          # the APP's trusted-source rule and left the runner's behind —
+          # exactly inverted — which took production down until someone noticed.
+          #
+          # Refusing to act on an empty IP, and requiring type == ip_addr,
+          # means the worst case is now a stale runner rule rather than an
+          # outage. A leftover rule is a problem you can see and fix; a
+          # deleted app rule looks like the application is broken.
+          if [ -z "$RUNNER_IP" ]; then
+            echo "::warning::No runner IP recorded — the firewall step did not run."
+            echo "::warning::Not removing anything: a blind delete here caused an outage once."
+            exit 0
+          fi
+
+          UUID=$(doctl databases firewalls list "${{ secrets.DO_DATABASE_CLUSTER_ID }}" -o json \
+            | jq -r --arg ip "$RUNNER_IP" \
+                'map(select(.type == "ip_addr" and .value == $ip)) | .[0].uuid // empty')
+
+          if [ -z "$UUID" ]; then
+            echo "No ip_addr rule found for $RUNNER_IP — nothing to remove."
+            exit 0
+          fi
+
+          doctl databases firewalls remove "${{ secrets.DO_DATABASE_CLUSTER_ID }}" --uuid "$UUID"
+          echo "Removed ip_addr rule $UUID for $RUNNER_IP"
+
+          # The app must still be able to reach its own database. If this ever
+          # reports missing, the job has broken production and needs to say so
+          # loudly rather than finishing green.
+          if ! doctl databases firewalls list "${{ secrets.DO_DATABASE_CLUSTER_ID }}" -o json \
+            | grep -q '"type": *"app"'; then
+            echo "::error::No app trusted-source rule remains on the cluster. The application"
+            echo "::error::cannot reach its database. Restore it immediately with:"
+            echo "::error::  doctl databases firewalls append <cluster> --rule app:<app-id>"
+            exit 1
           fi

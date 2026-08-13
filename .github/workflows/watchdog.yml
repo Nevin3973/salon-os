@@ -1,0 +1,61 @@
+# Independent uptime watchdog.
+#
+# DigitalOcean's own uptime check already watches /api/health from three
+# regions. This exists because that alert did not fire during a real outage on
+# 13 Aug 2026 — the app was unreachable, the check was correctly configured,
+# and no email arrived. A monitor you cannot trust is worse than none, because
+# silence starts to read as health.
+#
+# This runs somewhere else entirely, on a different provider, and depends on
+# nothing in the DigitalOcean account. GitHub emails the repository owner when
+# a scheduled workflow fails, so a failure here reaches you without any
+# notification setup at all.
+#
+# Deliberately checks the JSON body rather than only the status code: App
+# Platform serves its own holding page with a 200 when a container is
+# unhealthy, so "did it answer?" is not the same question as "is it working?".
+name: Watchdog
+
+on:
+  schedule:
+    # Every 15 minutes. GitHub's scheduler is approximate under load, so treat
+    # this as "roughly quarter-hourly" rather than a precise interval.
+    - cron: "*/15 * * * *"
+  workflow_dispatch: {}
+
+concurrency:
+  group: watchdog
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Health endpoint reports ok
+        run: |
+          URL="https://sea-turtle-app-9qr3w.ondigitalocean.app/api/health"
+
+          # Two attempts. A single failed request is usually a blip; two
+          # separated by 20s is worth waking someone for. Alerting on the first
+          # transient error is how monitoring gets muted.
+          for attempt in 1 2; do
+            BODY=$(curl -s --max-time 25 "$URL" || true)
+            CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 25 "$URL" || echo 000)
+
+            if [ "$CODE" = "200" ] && echo "$BODY" | grep -q '"status":"ok"'; then
+              echo "Healthy (attempt $attempt)"
+              echo "$BODY"
+              exit 0
+            fi
+
+            echo "Attempt $attempt failed — HTTP $CODE"
+            echo "$BODY" | head -c 300
+            [ "$attempt" = "1" ] && sleep 20
+          done
+
+          echo "::error::Salon OS is not healthy. HTTP $CODE."
+          echo "::error::If the body above is a DigitalOcean holding page, the container is"
+          echo "::error::failing its health check — most often because the database is"
+          echo "::error::unreachable. Check the cluster's trusted sources first: an app rule"
+          echo "::error::going missing has caused this before."
+          exit 1
