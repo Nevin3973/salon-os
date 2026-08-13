@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 import { ATTRIBUTION } from "@/lib/brand";
+import { SalonMark } from "@/components/salon-mark";
 
 export type OpsNavItem = {
   label: string;
@@ -81,6 +82,12 @@ const ICONS = {
       <path d="M9 8h6M9 12h6" />
     </>
   ),
+  sparkle: (
+    <>
+      <path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z" />
+      <path d="M18.5 16.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z" />
+    </>
+  ),
 } as const;
 
 export function OpsShell({
@@ -89,6 +96,7 @@ export function OpsShell({
   items,
   userName,
   orgName,
+  orgLogoUrl = null,
   children,
 }: {
   brand: string;
@@ -96,6 +104,8 @@ export function OpsShell({
   items: OpsNavItem[];
   userName: string;
   orgName: string;
+  /** The salon's own logo. Null falls back to a monogram — see SalonMark. */
+  orgLogoUrl?: string | null;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
@@ -162,9 +172,10 @@ export function OpsShell({
       >
         Sign out
       </button>
-      {/* Maker's mark. Deliberately quiet — this sits on screens a salon's own
-          customers can see, so it should not compete with their branding. */}
-      <p className="attribution text-[10px] text-center mt-3 leading-tight">
+      {/* Repeats the co-brand at the foot of the drawer, which on mobile is the
+          only place it appears — the compact top bar has room for the salon's
+          identity or the product's, and the salon's wins there. */}
+      <p className="attribution text-[11px] text-center mt-3 leading-tight">
         {ATTRIBUTION}
       </p>
     </div>
@@ -174,10 +185,24 @@ export function OpsShell({
     <div className="min-h-screen lg:grid lg:grid-cols-[240px_1fr]">
       {/* Desktop sidebar */}
       <aside className="hidden lg:flex flex-col bg-surface border-r border-line sticky top-0 h-screen">
-        <div className="px-5 pt-6 pb-4 border-b border-line">
-          <div className="font-display text-xl font-bold text-velvet tracking-tight">{brand}</div>
-          <div className="text-[10px] uppercase tracking-[0.2em] text-faint font-semibold mt-0.5">
-            {subtitle}
+        {/* Two identities, stacked and clearly separated: the product on top,
+            the salon's own beneath it. Keeping them in one block with a rule
+            between is what stops the salon's name reading as a subtitle of the
+            product — they belong to different owners. */}
+        <div className="px-5 pt-5 pb-4 border-b border-line">
+          <div className="font-display text-lg font-bold text-velvet tracking-tight leading-none">
+            {brand}
+          </div>
+          <div className="attribution text-[10px] mt-1 leading-tight">{ATTRIBUTION}</div>
+
+          <div className="flex items-center gap-2.5 mt-4 pt-4 border-t border-line">
+            <SalonMark name={orgName} logoUrl={orgLogoUrl} size={34} />
+            <div className="min-w-0">
+              <div className="text-sm font-semibold text-ink truncate leading-tight">{orgName}</div>
+              <div className="text-[10px] uppercase tracking-[0.16em] text-faint font-semibold mt-0.5 truncate">
+                {subtitle}
+              </div>
+            </div>
           </div>
         </div>
         {nav}
@@ -195,8 +220,13 @@ export function OpsShell({
             {mobileOpen ? <path d="M6 6l12 12M18 6L6 18" /> : <path d="M3 6h18M3 12h18M3 18h18" />}
           </svg>
         </button>
-        <span className="font-display text-lg font-bold text-velvet">{brand}</span>
-        <span className="text-[10px] uppercase tracking-[0.18em] text-faint font-semibold">{subtitle}</span>
+        <SalonMark name={orgName} logoUrl={orgLogoUrl} size={26} />
+        <span className="min-w-0 flex-1 truncate">
+          <span className="block text-sm font-semibold text-ink truncate leading-tight">{orgName}</span>
+          <span className="block text-[9px] uppercase tracking-[0.16em] text-faint font-semibold truncate">
+            {brand} · {subtitle}
+          </span>
+        </span>
       </div>
       {mobileOpen && (
         <div className="lg:hidden fixed inset-0 z-30 pt-14">

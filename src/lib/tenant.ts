@@ -207,6 +207,26 @@ export async function activeOrgName(): Promise<string> {
   return m?.orgName ?? "";
 }
 
+/**
+ * The salon's OWN branding for the console chrome — its name and logo, as
+ * distinct from the product's (see `lib/brand.ts`).
+ *
+ * Read from the database rather than the session token on purpose: the token
+ * carries `orgName` but is only refreshed hourly, so a logo or rename done in
+ * Admin would appear to have silently failed for up to an hour. A salon
+ * changing its own branding expects to see it immediately.
+ */
+export async function activeOrgBranding(): Promise<{ name: string; logoUrl: string | null }> {
+  const session = await auth();
+  const orgId = session?.activeOrgId;
+  if (!orgId) return { name: "", logoUrl: null };
+  const org = await prisma.org.findUnique({
+    where: { id: orgId },
+    select: { name: true, logoUrl: true },
+  });
+  return { name: org?.name ?? "", logoUrl: org?.logoUrl ?? null };
+}
+
 /** Active location (branch/warehouse) name for chrome. */
 export async function activeLocationName(): Promise<string | null> {
   const session = await auth();

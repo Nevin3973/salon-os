@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
 import Link from "next/link";
 import { LoginArt } from "@/components/login-art";
-import { ATTRIBUTION } from "@/lib/brand";
+import { ATTRIBUTION, PRODUCT_NAME, WORDMARK } from "@/lib/brand";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -45,9 +45,13 @@ export default function LoginPage() {
       <div className="flex-1 flex items-center justify-center px-6 py-16">
         <div className="w-full max-w-sm login-panel">
           <div className="font-display text-3xl text-ink select-none">
-            Salon<span className="text-velvet"> OS</span>
+            {WORDMARK.first}
+            <span className="text-velvet"> {WORDMARK.second}</span>
           </div>
-          <p className="text-muted text-sm mt-2">Sign in to your workspace.</p>
+          {/* Part of the lockup, not a footnote — it sits with the wordmark
+              wherever the wordmark goes. */}
+          <p className="attribution text-[13px] mt-1.5">{ATTRIBUTION}</p>
+          <p className="text-muted text-sm mt-3">Sign in to your workspace.</p>
 
           <form onSubmit={onSubmit} className="mt-10">
             <label className="block mb-5">
@@ -96,7 +100,7 @@ export default function LoginPage() {
         </div>
       </div>
       <p className="text-center text-xs pb-6">
-        <span className="text-faint">Salon OS · </span>
+        <span className="text-faint">{PRODUCT_NAME} · </span>
         <span className="attribution">{ATTRIBUTION}</span>
       </p>
     </div>

@@ -34,6 +34,10 @@ model Org {
   gstin     String?
   /// Registered legal name for the tax-invoice header (falls back to `name`).
   legalName String?
+  /// The salon's own logo, shown beside its name in the console. Cloudinary URL,
+  /// uploaded in Admin → Branding. Null is normal: the UI falls back to a
+  /// monogram, so a salon that never uploads one still looks finished.
+  logoUrl   String?
   createdAt DateTime @default(now())
 
   locations            Location[]

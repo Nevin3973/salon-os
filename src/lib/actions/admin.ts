@@ -157,6 +157,54 @@ export async function setProductImage(input: {
   return { ok: true };
 }
 
+// ————— Branding —————
+
+/**
+ * The salon's own logo. Same trust model as product photos: the upload happens
+ * in the browser against an unsigned Cloudinary preset, and this is the only
+ * place permission is enforced — so the URL is pinned to the delivery host
+ * rather than accepted as any well-formed URL. Without that, this action would
+ * write an arbitrary attacker-chosen `src` into the chrome of every page.
+ *
+ * The org is identified from the session, never from input; there is no
+ * parameter that could point the write at another tenant.
+ */
+const orgLogoSchema = z.object({
+  logoUrl: z
+    .string()
+    .url()
+    .max(500)
+    .refine((u) => u.startsWith("https://res.cloudinary.com/"), {
+      message: "Logo must come from the upload service.",
+    })
+    .nullable(),
+});
+
+export async function setOrgLogo(input: { logoUrl: string | null }): Promise<AdminResult> {
+  const parsed = orgLogoSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid logo." };
+  }
+  const { session } = await requireVerifiedScopedSession("SUPER_ADMIN");
+
+  await prisma.org.update({
+    where: { id: session.orgId },
+    data: { logoUrl: parsed.data.logoUrl },
+  });
+  await logAudit(prisma, {
+    orgId: session.orgId,
+    userId: session.userId,
+    userName: session.name,
+    action: parsed.data.logoUrl ? "Updated the salon logo" : "Removed the salon logo",
+    entityType: "Org",
+    entityId: session.orgId,
+  });
+
+  // The logo sits in the shell on every console, so nothing narrower will do.
+  revalidatePath("/", "layout");
+  return { ok: true };
+}
+
 const salePricingSchema = z.object({
   productId: z.string().min(1),
   retailPriceCents: z.number().int().min(0).max(100_000_000),

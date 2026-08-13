@@ -1,9 +1,9 @@
-import { requireScopedSession, activeOrgName } from "@/lib/tenant";
+import { requireScopedSession, activeOrgBranding } from "@/lib/tenant";
 import { OpsShell } from "@/components/ops-shell";
 
 export default async function WarehouseLayout({ children }: { children: React.ReactNode }) {
   const { session, db } = await requireScopedSession("WAREHOUSE_MANAGER");
-  const orgName = await activeOrgName();
+  const org = await activeOrgBranding();
 
   const [queueCount, outstandingOrders] = await Promise.all([
     db.order.count({ where: { status: { in: ["PENDING", "PROCESSING"] } } }),
@@ -23,7 +23,8 @@ export default async function WarehouseLayout({ children }: { children: React.Re
         brand="Salon OS"
         subtitle="Warehouse"
         userName={session.name}
-        orgName={orgName}
+        orgName={org.name}
+        orgLogoUrl={org.logoUrl}
         items={[
           { label: "Order queue", href: "/warehouse/queue", icon: "queue", badge: queueCount || undefined },
           { label: "Pending supplies", href: "/warehouse/outstanding", icon: "clock", badge: outstandingCount || undefined },

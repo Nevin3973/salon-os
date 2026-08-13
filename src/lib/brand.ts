@@ -16,20 +16,29 @@ export const PRODUCT_NAME = "Salon OS";
 /** The company behind it. */
 export const VENDOR_NAME = "Beyond Demands";
 
-/** The parent business, shown as an attribution line. */
-export const PARENT_LINE = "Growth Solutions by Infynix Solutions";
+/** The parent business. Co-branded into the product lockup itself, so the
+ *  relationship is stated wherever the product is named rather than tucked
+ *  into a footnote. */
+export const PARENT_NAME = "Infynix Solutions";
 
 /** Marketing/site domain. */
 export const VENDOR_DOMAIN = "beyonddemands.in";
 
-/** Shown under the logo on sign-in and in footers. */
-export const VENDOR_LINE = `from ${VENDOR_NAME}`;
+/**
+ * The half-line that follows the wordmark. Kept separate from the wordmark so
+ * a two-line lockup (mark above, this below) and a one-line lockup can share
+ * the same words and never drift apart.
+ */
+export const PRODUCT_TAGLINE = `an ${PARENT_NAME} product`;
 
-/** Long form for document footers, e.g. the printed invoice. */
-export const POWERED_BY = `${PRODUCT_NAME} · ${VENDOR_NAME}`;
+/** One-line lockup for anywhere a stacked mark will not fit. */
+export const PRODUCT_LOCKUP = `${PRODUCT_NAME} — ${PRODUCT_TAGLINE}`;
 
-/** Attribution for the sign-in screen and app footer. */
-export const ATTRIBUTION = PARENT_LINE;
+/** Long form for document footers, e.g. the printed invoice and email. */
+export const POWERED_BY = PRODUCT_LOCKUP;
+
+/** Attribution shown under the wordmark on sign-in and in the app shell. */
+export const ATTRIBUTION = PRODUCT_TAGLINE;
 
 /**
  * The two halves of the wordmark, so the UI can colour the second one.

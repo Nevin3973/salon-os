@@ -1,4 +1,4 @@
-import { requireScopedSession, activeOrgName, activeLocationName } from "@/lib/tenant";
+import { requireScopedSession, activeOrgBranding, activeLocationName } from "@/lib/tenant";
 import { OpsShell } from "@/components/ops-shell";
 import { TillLock, LOCKABLE_ID } from "@/components/till-lock";
 
@@ -9,7 +9,7 @@ import { TillLock, LOCKABLE_ID } from "@/components/till-lock";
  */
 export default async function SalonLayout({ children }: { children: React.ReactNode }) {
   const { session } = await requireScopedSession(["PURCHASE_MANAGER", "SALON_STAFF"]);
-  const [orgName, branchName] = await Promise.all([activeOrgName(), activeLocationName()]);
+  const [org, branchName] = await Promise.all([activeOrgBranding(), activeLocationName()]);
   const isManager = session.role === "PURCHASE_MANAGER";
 
   // Cashiers only sell and reprint their own bills; managers get inventory,
@@ -35,7 +35,8 @@ export default async function SalonLayout({ children }: { children: React.ReactN
           brand="Salon OS"
           subtitle={isManager ? (branchName ?? "Salon") : `${branchName ?? "Salon"} · Counter`}
           userName={session.name}
-          orgName={orgName}
+          orgName={org.name}
+          orgLogoUrl={org.logoUrl}
           items={items}
         >
           {children}
