@@ -227,11 +227,30 @@ export async function activeOrgBranding(): Promise<{ name: string; logoUrl: stri
   return { name: org?.name ?? "", logoUrl: org?.logoUrl ?? null };
 }
 
-/** Active location (branch/warehouse) name for chrome. */
+/**
+ * Active location (branch/warehouse) name for chrome.
+ *
+ * Resolved from the database via `activeLocationId`, not from the token's
+ * `locationName`. That field is not populated, so every branch console silently
+ * fell back to the generic word "Salon" — three managers at three different
+ * branches saw identical chrome, which is precisely when someone adjusts stock
+ * at the wrong site. Reading it here also means a renamed branch appears
+ * immediately rather than after the hourly token refresh.
+ */
 export async function activeLocationName(): Promise<string | null> {
   const session = await auth();
-  const m = session?.memberships.find((x) => x.orgId === session.activeOrgId);
-  return m?.locationName ?? null;
+  const locationId = session?.activeLocationId;
+  const orgId = session?.activeOrgId;
+  if (!locationId || !orgId) return null;
+  // Through `withOrg`, not the bare client. Location is an RLS-protected tenant
+  // table, so a query without `app.org_id` set returns no rows at all rather
+  // than erroring — a bare `prisma.location.findUnique` here looks correct,
+  // type-checks, and silently always yields null. Org carries no such policy,
+  // which is why the branding lookup above can use the plain client.
+  const location = await withOrg(orgId, (tx) =>
+    tx.location.findUnique({ where: { id: locationId }, select: { name: true } })
+  );
+  return location?.name ?? null;
 }
 
 export { Prisma };
