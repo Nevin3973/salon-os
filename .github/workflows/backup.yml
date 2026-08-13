@@ -28,7 +28,7 @@ jobs:
   backup:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install doctl
         uses: digitalocean/action-doctl@v2
@@ -42,8 +42,30 @@ jobs:
           echo "ip=$RUNNER_IP" >> "$GITHUB_OUTPUT"
           doctl databases firewalls append "${{ secrets.DO_DATABASE_CLUSTER_ID }}" \
             --rule "ip_addr:$RUNNER_IP"
-          # The rule takes a few seconds to apply across the cluster.
-          sleep 20
+      - name: Wait until the database is actually reachable
+        env:
+          DIRECT_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+        run: |
+          if [ -z "$DIRECT_URL" ]; then
+            echo "::error::BACKUP_DATABASE_URL is not set."
+            exit 1
+          fi
+          # Poll for real connectivity rather than sleeping a guessed number of
+          # seconds. A firewall rule takes a variable time to apply across the
+          # cluster, and a fixed sleep is either wasteful or — as it was here —
+          # occasionally too short. The resulting failure then looks like a
+          # credentials problem rather than the timing one it actually is.
+          for i in $(seq 1 20); do
+            if docker run --rm postgres:17 psql "$DIRECT_URL" -tAc "SELECT 1" >/dev/null 2>&1; then
+              echo "Reachable after $((i * 10))s"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::Still unreachable after 200s. Either the firewall rule did not apply,"
+          echo "::error::or BACKUP_DATABASE_URL is wrong. It must be the doadmin connection —"
+          echo "::error::the app role cannot read past row-level security."
+          exit 1
 
       - name: Dump
         env:
