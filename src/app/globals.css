@@ -143,11 +143,11 @@
   --color-cta-2-dark: var(--color-cta-2-dark);
   --color-on-cta: var(--color-on-cta);
   --color-price: var(--color-price);
-  /* One family throughout. The display face used to be Marcellus, a 400-only
-     serif: every bold heading was synthetically emboldened by the browser, and
-     its capitals made the "Salon OS" wordmark read oddly. Inter carries real
-     400-700 weights, so the wordmark is set rather than faked. */
-  --font-display: var(--font-inter);
+  /* Poppins for the wordmark and headings, Inter for running text. Both carry
+     real weights, so nothing is synthetically emboldened — that was the fault
+     with Marcellus (and would have been with Bebas Neue): a 400-only face that
+     the browser fakes a bold for, which is what made the wordmark read oddly. */
+  --font-display: var(--font-poppins);
   --font-sans: var(--font-inter);
 }
 
@@ -477,7 +477,10 @@ textarea:focus-visible {
 .auth-page {
   position: relative;
   overflow: hidden;
-  background: var(--color-bg);
+  /* True black here rather than the console's #0c0c0c: this is the one screen
+     with no dense content on it, so the gold has nothing to compete with and
+     the extra depth reads. */
+  background: #000;
 }
 
 /* Three soft pools of colour. Sized in rem rather than % so the
@@ -487,10 +490,12 @@ textarea:focus-visible {
   position: absolute;
   inset: 0;
   pointer-events: none;
+  /* Gold only. A teal pool used to sit bottom-right; against true black it read
+     as a second brand colour rather than as light. */
   background:
-    radial-gradient(60rem 42rem at 10% 16%, rgba(200, 164, 78, 0.18), transparent 62%),
-    radial-gradient(46rem 34rem at 88% 82%, rgba(45, 212, 191, 0.10), transparent 64%),
-    radial-gradient(38rem 30rem at 70% 8%, rgba(200, 164, 78, 0.07), transparent 60%);
+    radial-gradient(58rem 40rem at 8% 14%, rgba(200, 164, 78, 0.22), transparent 62%),
+    radial-gradient(44rem 32rem at 90% 84%, rgba(200, 164, 78, 0.09), transparent 64%),
+    radial-gradient(34rem 26rem at 72% 6%, rgba(221, 190, 106, 0.06), transparent 60%);
 }
 
 .auth-wordmark {
@@ -537,8 +542,12 @@ textarea:focus-visible {
   border-radius: 18px;
   background: rgba(255, 255, 255, 0.055);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(22px) saturate(150%);
+  /* Prefixed FIRST, standard LAST. In the other order the minifier drops the
+     unprefixed property from the production bundle and the panel silently stops
+     frosting — it looked right in dev and shipped flat. The standard property
+     must come last so it also wins the cascade where both are understood. */
   -webkit-backdrop-filter: blur(22px) saturate(150%);
+  backdrop-filter: blur(22px) saturate(150%);
   /* The inset highlight is what sells it as glass rather than as a
      translucent rectangle: real glass catches light on its top edge. */
   box-shadow:

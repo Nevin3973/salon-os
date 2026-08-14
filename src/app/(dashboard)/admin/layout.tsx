@@ -23,7 +23,6 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           { label: "Branding", href: "/admin/branding", icon: "sparkle" },
           { label: "Auth codes", href: "/admin/codes", icon: "key" },
           { label: "Audit log", href: "/admin/audit", icon: "shield" },
-          { label: "System", href: "/admin/system", icon: "gauge" },
         ]}
       >
         {children}

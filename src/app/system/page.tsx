@@ -1,9 +1,12 @@
-import { requireScopedSession } from "@/lib/tenant";
+import { notFound } from "next/navigation";
+import { auth } from "@/auth";
+import { isDeveloper } from "@/lib/developer";
 import { prisma } from "@/lib/db";
 import { limiterBackend } from "@/lib/rate-limit";
 import { observabilityEnabled } from "@/lib/observability";
 import { appVersion } from "@/lib/version";
 import { fmtDateTime } from "@/lib/format";
+import { PARENT_NAME } from "@/lib/brand";
 
 export const dynamic = "force-dynamic";
 
@@ -12,8 +15,11 @@ const BACKUP_STALE_HOURS = 36;
 
 type Level = "ok" | "warn" | "bad";
 
-export default async function AdminSystemPage() {
-  await requireScopedSession("SUPER_ADMIN");
+export default async function SystemPage() {
+  // notFound() rather than a "forbidden" screen: an admin who wanders here
+  // should not learn that a maintenance console exists at all.
+  const session = await auth();
+  if (!isDeveloper(session?.user?.email)) notFound();
 
   // Measured here, not read from a cache: an indicator that reports a stored
   // value tells you the system was healthy once, which is not the question.
@@ -54,11 +60,12 @@ export default async function AdminSystemPage() {
           : "ok";
 
   return (
-    <div className="max-w-3xl">
-      <h1 className="text-2xl font-semibold">System</h1>
+    <div className="theme-analytics bg-bg text-ink min-h-screen px-6 py-10">
+      <div className="max-w-3xl mx-auto">
+      <h1 className="text-2xl font-semibold">System status</h1>
       <p className="text-muted text-sm mt-1 max-w-xl">
-        What this deployment is running and whether the parts it depends on are working. Everything
-        here is checked when you load the page, not read from a cache.
+        Maintenance view for {PARENT_NAME}. Everything here is checked when you load the page, not
+        read from a cache. Salon staff never see this.
       </p>
 
       <div className="bg-surface border border-line rounded-xl p-5 mt-6">
@@ -169,6 +176,7 @@ export default async function AdminSystemPage() {
             </tbody>
           </table>
         )}
+      </div>
       </div>
     </div>
   );
