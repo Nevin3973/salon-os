@@ -674,7 +674,18 @@ async function seedBranchStockAndSales(ctx: SeededOrg) {
           invoiceCode: formatInvoiceCode(prefix, fy, branchSeq),
           fy,
           soldByUserId: pm.id,
-          customerName: SAMPLE_CUSTOMERS[Math.floor(hash(`${branch.name}:cust:${s}`) * SAMPLE_CUSTOMERS.length)],
+          ...(() => {
+            const ci = Math.floor(hash(`${branch.name}:cust:${s}`) * SAMPLE_CUSTOMERS.length);
+            const who = SAMPLE_CUSTOMERS[ci];
+            // A walk-in is deliberately anonymous; everyone else gets a number,
+            // because a demo where no bill has a contact makes the customer
+            // features look unbuilt rather than unused.
+            const phone =
+              who === "Walk-in customer"
+                ? null
+                : `9${String(700000000 + Math.floor(hash(`${branch.name}:ph:${s}`) * 99999999)).slice(0, 9)}`;
+            return { customerName: who, customerPhone: phone };
+          })(),
           paymentMode: paymentModes[s % 3],
           subtotalCents: totals.subtotalCents,
           discountCents: totals.discountCents,

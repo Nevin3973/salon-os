@@ -561,7 +561,24 @@ export async function salesSummary(scope: ReportScope, range: ReportRange): Prom
 }
 
 /** One CSV row per bill line — the salon manager's sales export. */
-export async function salesCsv(scope: ReportScope, range: ReportRange): Promise<string> {
+export async function salesCsv(
+  scope: ReportScope,
+  range: ReportRange,
+  /**
+   * Whether the caller may take customer identities off the platform.
+   *
+   * A branch manager needs this export to reconcile a day's takings, and that
+   * need is served fully by the money columns. It does not require a list of
+   * every customer's name and mobile number — which is what the file used to
+   * hand over, to anyone who could reach the till, in a format that leaves the
+   * building in one click. Names and numbers stay visible on screen, where
+   * they are looked up one customer at a time and are audit-logged; only bulk
+   * extraction is held back to the account owner.
+   *
+   * Defaults to false so a new caller cannot leak PII by forgetting the flag.
+   */
+  includeCustomerPii = false
+): Promise<string> {
   const db = getScopedDb(scope.orgId);
   const sales = await db.sale.findMany({
     where: {
@@ -581,8 +598,11 @@ export async function salesCsv(scope: ReportScope, range: ReportRange): Promise<
     { header: "Date", value: (r) => r.sale.createdAt.toISOString().slice(0, 10) },
     { header: "Status", value: (r) => SALE_STATUS_LABEL[r.sale.status] ?? r.sale.status },
     { header: "Branch", value: (r) => r.sale.branch.name },
-    { header: "Customer", value: (r) => r.sale.customerName },
-    { header: "Phone", value: (r) => r.sale.customerPhone },
+    // Redacted rather than dropped: a column that vanishes between two exports
+    // makes downstream spreadsheets shift silently, so the shape is stable and
+    // only the values are withheld.
+    { header: "Customer", value: (r) => (includeCustomerPii ? r.sale.customerName : "") },
+    { header: "Phone", value: (r) => (includeCustomerPii ? r.sale.customerPhone : "") },
     { header: "Buyer GSTIN", value: (r) => r.sale.buyerGstin },
     { header: "Payment", value: (r) => PAYMENT_MODE_LABEL[r.sale.paymentMode as PaymentModeValue] },
     { header: "Product", value: (r) => r.name },

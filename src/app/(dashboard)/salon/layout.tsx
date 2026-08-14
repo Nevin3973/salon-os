@@ -1,6 +1,6 @@
 import { requireScopedSession, activeOrgBranding, activeLocationName } from "@/lib/tenant";
 import { OpsShell } from "@/components/ops-shell";
-import { appVersion } from "@/lib/version";
+import { versionLabel } from "@/lib/version";
 import { TillLock, LOCKABLE_ID } from "@/components/till-lock";
 import { DesktopOnly } from "@/components/desktop-only";
 
@@ -40,7 +40,7 @@ export default async function SalonLayout({ children }: { children: React.ReactN
           userName={session.name}
           orgName={org.name}
           orgLogoUrl={org.logoUrl}
-        version={appVersion().commit}
+        version={versionLabel()}
           items={items}
         >
           {children}

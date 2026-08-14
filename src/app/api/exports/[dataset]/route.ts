@@ -75,7 +75,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ data
     case "orders":
       return csvResponse("orders", await ordersCsv(scope, range, (status as OrderStatus) || undefined));
     case "sales":
-      return csvResponse("sales", await salesCsv(scope, range));
+      // Only the account owner may take customer names and numbers out of the
+      // platform. An API key is a machine credential with no person behind it,
+      // so it never qualifies however it was provisioned.
+      return csvResponse("sales", await salesCsv(scope, range, ctx.role === "SUPER_ADMIN"));
     case "inventory":
       return csvResponse("inventory", await inventoryCsv(scope));
     case "movements":

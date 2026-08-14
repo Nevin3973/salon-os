@@ -1,6 +1,6 @@
 {
   "name": "salon-os",
-  "version": "0.1.0",
+  "version": "1.5.14",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -14,6 +14,7 @@
     "db:seed": "tsx prisma/seed.ts",
     "org:bootstrap": "tsx scripts/bootstrap-org.ts",
     "demo:purge": "tsx scripts/purge-demo.ts",
+    "release": "bash scripts/release.sh",
     "docker:build": "docker build -t salon-os .",
     "docker:run": "docker run -p 3000:3000 salon-os",
     "postinstall": "prisma generate"

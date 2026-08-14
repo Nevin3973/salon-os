@@ -70,7 +70,9 @@ export default async function SystemPage() {
 
       <div className="bg-surface border border-line rounded-xl p-5 mt-6">
         <div className="text-[11px] uppercase tracking-[0.12em] text-faint">Running version</div>
-        <div className="text-xl font-semibold mt-1 tabular-nums">{version.commit}</div>
+        <div className="text-xl font-semibold mt-1 tabular-nums">
+          v{version.version} <span className="text-muted font-normal">· {version.commit}</span>
+        </div>
         <div className="text-xs text-muted mt-1">
           {version.builtAt ? `Built ${version.builtAt}` : "Built locally — not from a release image"}
         </div>

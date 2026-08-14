@@ -1,6 +1,6 @@
 import { requireSession, activeOrgBranding } from "@/lib/tenant";
 import { OpsShell } from "@/components/ops-shell";
-import { appVersion } from "@/lib/version";
+import { versionLabel } from "@/lib/version";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const session = await requireSession("SUPER_ADMIN");
@@ -14,7 +14,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         userName={session.name}
         orgName={org.name}
         orgLogoUrl={org.logoUrl}
-        version={appVersion().commit}
+        version={versionLabel()}
         items={[
           { label: "Overview", href: "/admin/overview", icon: "gauge" },
           { label: "Reports", href: "/admin/reports", icon: "chart" },

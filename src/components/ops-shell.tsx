@@ -181,8 +181,9 @@ export function OpsShell({
       <p className="attribution text-[11px] text-center mt-3 leading-tight">
         {ATTRIBUTION}
       </p>
-      {/* Build id. Small, but the difference between "it's broken" and a report
-          somebody can act on is knowing which build was on screen. */}
+      {/* Release and exact build. The difference between "it's broken" and a
+          report somebody can act on is knowing which of the two was on screen —
+          a release can be rebuilt, so the version alone is not enough. */}
       <p className="text-[10px] text-faint text-center mt-1 tabular-nums">{version}</p>
     </div>
   );
