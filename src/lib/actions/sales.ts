@@ -8,6 +8,7 @@ import { requireVerifiedSession, setOrgConfig, withOrg } from "@/lib/tenant";
 import { logAudit } from "@/lib/audit";
 import { verifyAuthCode } from "@/lib/authcode";
 import { bumpBranchStock } from "@/lib/branch-stock";
+import { normalisePhone } from "@/lib/customer";
 import { reportError } from "@/lib/observability";
 import {
   lineGst,
@@ -254,6 +255,35 @@ export async function recordSale(input: {
         fy,
       });
 
+      /**
+       * Build the customer master as bills are rung up.
+       *
+       * The phone is the identity — it is what a returning customer gives at
+       * the counter, and the model is unique on (orgId, phone). Without this
+       * every bill carried a loose name and number that belonged to nobody:
+       * the Customer table stayed empty, so "what has this person bought
+       * before?" had no answer even though the data was sitting in the sales.
+       *
+       * Normalised before lookup so +91, spaces and dashes all resolve to the
+       * same person rather than creating three of them. No phone means a true
+       * walk-in, and a walk-in is deliberately not a customer record — inventing
+       * one per anonymous sale would fill the master with rows nobody can use.
+       *
+       * The name is only overwritten when a fresh one is given, so a later
+       * blank bill cannot erase a customer's name.
+       */
+      const phone = normalisePhone(parsed.data.customerPhone ?? "");
+      let customerId: string | null = null;
+      if (phone) {
+        const name = parsed.data.customerName?.trim() || null;
+        const customer = await tx.customer.upsert({
+          where: { orgId_phone: { orgId: session.orgId, phone } },
+          create: { orgId: session.orgId, phone, name: name ?? "Customer" },
+          update: name ? { name } : {},
+        });
+        customerId = customer.id;
+      }
+
       const sale = await tx.sale.create({
         data: {
           orgId: session.orgId,
@@ -262,8 +292,9 @@ export async function recordSale(input: {
           invoiceCode: formatInvoiceCode(prefix, fy, seq),
           fy,
           soldByUserId: session.userId,
+          customerId,
           customerName: parsed.data.customerName || null,
-          customerPhone: parsed.data.customerPhone || null,
+          customerPhone: phone || null,
           buyerGstin: parsed.data.buyerGstin || null,
           paymentMode: parsed.data.paymentMode,
           subtotalCents: totals.subtotalCents,
