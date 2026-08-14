@@ -232,45 +232,57 @@ export function PosTerminal({ items, staff }: { items: Sellable[]; staff: StaffO
                     </span>
                   )}
 
-                  {/* Square tiles, so the artwork gets the room. Recognising a
-                      bottle is faster than reading a name, which is the whole
-                      point of a tile over a list; products without a photo fall
-                      back to an initial rather than a broken-image gap. */}
-                  <div className="flex-1 min-h-0 grid place-items-center">
+                  {/* Image band on top, text below, in a fixed 3:2 split.
+
+                      An earlier version let the picture take whatever space was
+                      left and pushed the wording into 11-13px at the bottom,
+                      where it was unreadable across a counter at arm's length.
+                      A tile is scanned in this order — is that the right
+                      product, how much is it — so the name and the price get a
+                      guaranteed share of the height and legible sizes, and the
+                      picture takes what remains rather than the other way round.
+
+                      Rack and stock ride ON the image as chips: they are
+                      glanceable, needed only occasionally, and putting them in
+                      the text block was what crowded it. */}
+                  <div className="relative h-[58%] shrink-0 rounded-xl bg-bg overflow-hidden grid place-items-center">
                     {p.imageUrl ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
                         src={p.imageUrl}
                         alt=""
                         loading="lazy"
-                        className="max-h-full max-w-full object-contain rounded-lg"
+                        className="max-h-full max-w-full object-contain"
                       />
                     ) : (
                       <span
                         aria-hidden
-                        className="w-2/3 aspect-square rounded-xl bg-velvet-soft text-velvet grid place-items-center font-display text-2xl font-bold"
+                        className="text-velvet/70 font-display text-3xl font-bold"
                       >
                         {p.name.charAt(0).toUpperCase()}
                       </span>
                     )}
+
+                    {p.rackId && (
+                      <span className="absolute top-1 left-1 px-1.5 py-0.5 rounded-md bg-bg/85 text-velvet text-[10px] font-bold tabular-nums">
+                        {p.rackId}
+                      </span>
+                    )}
+                    <span
+                      className={`absolute top-1 right-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold tabular-nums ${
+                        p.onHand <= 3 ? "bg-out text-white" : "bg-bg/85 text-muted"
+                      }`}
+                    >
+                      {p.onHand}
+                    </span>
                   </div>
 
-                  <div className="shrink-0 mt-1.5">
-                    <div className="font-semibold text-[13px] leading-tight line-clamp-2">{p.name}</div>
-                    <div className="text-[11px] text-faint truncate">
-                      {p.rackId ? (
-                        <span className="text-velvet font-semibold">📍 {p.rackId}</span>
-                      ) : (
-                        p.brand
-                      )}
+                  <div className="flex-1 min-h-0 flex flex-col justify-between pt-1.5">
+                    <div className="text-[15px] font-semibold leading-[1.15] line-clamp-2">
+                      {p.name}
                     </div>
-                    <div className="flex items-baseline justify-between mt-0.5">
-                      <span className="font-bold text-sm tabular-nums">{formatMoney(inclusive(p))}</span>
-                      <span
-                        className={`text-[11px] tabular-nums ${p.onHand <= 3 ? "text-out font-semibold" : "text-faint"}`}
-                      >
-                        {p.onHand} left
-                      </span>
+                    <div className="text-[17px] font-bold tabular-nums leading-none">
+                      {formatMoney(inclusive(p))}
                     </div>
                   </div>
                 </button>
