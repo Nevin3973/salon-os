@@ -4,7 +4,7 @@
    SALON OS — Design tokens
    by Infynix Growth Solutions
    Source of truth: the user's design on the `design-reference`
-   branch. Marcellus display · Inter body · muted gold accent.
+   branch. Inter throughout · muted gold accent.
    Root = light storefront. `.theme-ops` / `.theme-analytics`
    switch the consoles to the dark system.
    ═══════════════════════════════════════════════════════════ */
@@ -143,7 +143,11 @@
   --color-cta-2-dark: var(--color-cta-2-dark);
   --color-on-cta: var(--color-on-cta);
   --color-price: var(--color-price);
-  --font-display: var(--font-marcellus);
+  /* One family throughout. The display face used to be Marcellus, a 400-only
+     serif: every bold heading was synthetically emboldened by the browser, and
+     its capitals made the "Salon OS" wordmark read oddly. Inter carries real
+     400-700 weights, so the wordmark is set rather than faked. */
+  --font-display: var(--font-inter);
   --font-sans: var(--font-inter);
 }
 
@@ -463,101 +467,141 @@ textarea:focus-visible {
    is the only way to vary it per print. */
 
 /* ═══════════════════════════════════════════════════════════
-   SIGN-IN ARTWORK
-   Concentric rings with arcs turning slowly at different
-   rates. Abstract on purpose: no object to recognise, so
-   nothing to get wrong. CSS only; no JavaScript on the path
-   to signing in. The rotations are minutes long and sit well
-   away from the form, so nothing tugs at the eye while
-   someone types a password.
+   SIGN-IN
+   A plain field of light behind a frosted panel. The field is
+   STATIC — glass needs something behind it to refract or it
+   reads as a flat grey box, but nothing here moves. The only
+   motion is the wordmark setting itself once on load.
    ═══════════════════════════════════════════════════════════ */
 
-/* Rings and arcs.
+.auth-page {
+  position: relative;
+  overflow: hidden;
+  background: var(--color-bg);
+}
 
-   Each arc runs two animations at once, split by PROPERTY on purpose: the
-   entrance animates only `opacity` and the rotation only `transform`. Where two
-   running animations touch the same property the last one wins, so an entrance
-   that also moved the element would fight the spin and one of the two would be
-   silently dropped.
+/* Three soft pools of colour. Sized in rem rather than % so the
+   composition keeps its proportions instead of stretching flat on a wide
+   monitor. */
+.auth-field {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(60rem 42rem at 10% 16%, rgba(200, 164, 78, 0.18), transparent 62%),
+    radial-gradient(46rem 34rem at 88% 82%, rgba(45, 212, 191, 0.10), transparent 64%),
+    radial-gradient(38rem 30rem at 70% 8%, rgba(200, 164, 78, 0.07), transparent 60%);
+}
 
-   `transform-origin: 0 0` is the composition's centre: the parent group's
-   translate puts each child's local origin there, so they turn about the middle
-   rather than about the viewport corner. Without it SVG resolves the origin
-   against the top-left and the rings swing across the screen. */
-.login-art .rings,
-.login-art .ticks {
+.auth-wordmark {
+  font-size: clamp(3.25rem, 9vw, 6.5rem);
+  line-height: 1;
+  letter-spacing: -0.02em;
+  font-weight: 700;
+}
+
+/* Each letter arrives on its own. `inline-block` is required — a transform
+   does nothing to an inline box, so without it the letters would fade but
+   never move. */
+.auth-letter {
+  display: inline-block;
   opacity: 0;
-  animation: art-fade 1.6s ease-out 0.35s forwards;
+  white-space: pre;
+  animation: auth-letter-rise 0.75s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-.login-art .arc,
-.login-art .orbit {
+/* Gold rule that draws out under the wordmark once the letters have landed. */
+.auth-rule {
+  height: 2px;
+  width: min(15rem, 60%);
+  margin-top: 1.5rem;
+  transform-origin: left center;
+  transform: scaleX(0);
+  background: linear-gradient(90deg, var(--color-velvet), transparent);
+  animation: auth-rule-draw 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.auth-fade {
   opacity: 0;
-  transform-origin: 0 0;
+  animation: auth-fade-up 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
-/* Deliberately slow, deliberately coprime-ish periods: nothing lines back up
-   into a repeating pattern the eye can lock onto while someone reads the form.
-   Alternating direction keeps it from reading as one object turning. */
-.login-art .arc-1 { animation: art-fade 1.4s ease-out 0.50s forwards, art-spin 64s linear infinite; }
-.login-art .arc-2 { animation: art-fade 1.4s ease-out 0.62s forwards, art-spin-rev 89s linear infinite; }
-.login-art .arc-3 { animation: art-fade 1.4s ease-out 0.74s forwards, art-spin 127s linear infinite; }
-.login-art .arc-4 { animation: art-fade 1.4s ease-out 0.86s forwards, art-spin-rev 151s linear infinite; }
 
-.login-art .orbit-1 { animation: art-fade 1.4s ease-out 0.95s forwards, art-spin 43s linear infinite; }
-.login-art .orbit-2 { animation: art-fade 1.4s ease-out 1.05s forwards, art-spin-rev 31s linear infinite; }
-
-.login-art .art-glow {
+.auth-card {
   opacity: 0;
-  animation: art-fade 2.4s ease-out 0.4s forwards;
+  animation: auth-fade-up 0.8s cubic-bezier(0.22, 1, 0.36, 1) 0.15s both;
 }
 
-/* Slow drift, so the screen feels alive rather than frozen — small enough to
-   sit outside the reading path. */
-.login-art .mote {
-  animation: art-drift 9s ease-in-out infinite;
-}
-.login-art .mote-2 { animation-duration: 12s; animation-delay: -3s; }
-.login-art .mote-3 { animation-duration: 10.5s; animation-delay: -6s; }
-
-@keyframes art-spin {
-  to { transform: rotate(360deg); }
-}
-@keyframes art-spin-rev {
-  to { transform: rotate(-360deg); }
-}
-@keyframes art-fade {
-  to { opacity: 1; }
-}
-@keyframes art-drift {
-  0%, 100% { transform: translate(0, 0); }
-  50%      { transform: translate(14px, -26px); }
+/* The frosted panel. */
+.glass-card {
+  position: relative;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.055);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(22px) saturate(150%);
+  -webkit-backdrop-filter: blur(22px) saturate(150%);
+  /* The inset highlight is what sells it as glass rather than as a
+     translucent rectangle: real glass catches light on its top edge. */
+  box-shadow:
+    0 24px 60px -20px rgba(0, 0, 0, 0.7),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
-/* The form itself rises in, once, as the page settles. */
-.login-panel {
-  animation: panel-rise 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+/* Safari before 18 and Firefox with the flag off ignore backdrop-filter and
+   would render the card almost transparent over the gradients, leaving the
+   form unreadable. Fall back to an opaque panel. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass-card {
+    background: rgba(20, 20, 20, 0.93);
+  }
 }
-.login-panel > * { animation: panel-rise 0.6s cubic-bezier(0.22, 1, 0.36, 1) both; }
-.login-panel > *:nth-child(1) { animation-delay: 0.06s; }
-.login-panel > *:nth-child(2) { animation-delay: 0.12s; }
-.login-panel > *:nth-child(3) { animation-delay: 0.18s; }
 
-@keyframes panel-rise {
-  from { opacity: 0; transform: translateY(14px); }
+.glass-input {
+  width: 100%;
+  height: 2.75rem;
+  padding: 0 0.875rem;
+  font-size: 0.875rem;
+  color: var(--color-ink);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  outline: none;
+  transition: border-color 0.15s, background-color 0.15s;
+}
+.glass-input::placeholder {
+  color: var(--color-faint);
+}
+.glass-input:focus {
+  border-color: var(--color-velvet);
+  background: rgba(255, 255, 255, 0.08);
+}
+/* Chrome paints its own opaque autofill background, which punches a solid
+   block through the glass. A long inset shadow is the only way to override it. */
+.glass-input:-webkit-autofill,
+.glass-input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--color-ink);
+  -webkit-box-shadow: 0 0 0 60rem rgba(30, 30, 30, 0.96) inset;
+  caret-color: var(--color-ink);
+}
+
+@keyframes auth-letter-rise {
+  from { opacity: 0; transform: translateY(0.5em); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes auth-rule-draw {
+  to { transform: scaleX(1); }
+}
+@keyframes auth-fade-up {
+  from { opacity: 0; transform: translateY(0.75rem); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
-/* Motion is decoration here; it must never be the reason someone feels
+/* Motion here is decoration; it must never be the reason someone feels
    unwell. Everything lands in its finished state instead. */
 @media (prefers-reduced-motion: reduce) {
-  .login-art .rings,
-  .login-art .ticks,
-  .login-art .arc,
-  .login-art .orbit,
-  .login-art .art-glow,
-  .login-art .mote,
-  .login-panel,
-  .login-panel > * {
+  .auth-letter,
+  .auth-rule,
+  .auth-fade,
+  .auth-card {
     animation: none !important;
     opacity: 1;
     transform: none;

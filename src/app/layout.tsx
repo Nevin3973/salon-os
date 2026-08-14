@@ -1,15 +1,8 @@
 import type { Metadata } from "next";
-import { Marcellus, Inter } from "next/font/google";
+import { Inter } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
 import { APP_TITLE } from "@/lib/brand";
-
-const marcellus = Marcellus({
-  variable: "--font-marcellus",
-  weight: "400",
-  subsets: ["latin"],
-  display: "swap",
-});
 
 const inter = Inter({
   variable: "--font-inter",
@@ -31,7 +24,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${marcellus.variable} ${inter.variable} antialiased font-sans`}>
+      <body className={`${inter.variable} antialiased font-sans`}>
         <Providers>{children}</Providers>
       </body>
     </html>

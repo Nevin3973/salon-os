@@ -1,6 +1,7 @@
 import { requireScopedSession, activeOrgBranding } from "@/lib/tenant";
 import { OpsShell } from "@/components/ops-shell";
 import { appVersion } from "@/lib/version";
+import { DesktopOnly } from "@/components/desktop-only";
 
 export default async function WarehouseLayout({ children }: { children: React.ReactNode }) {
   const { session, db } = await requireScopedSession("WAREHOUSE_MANAGER");
@@ -19,6 +20,7 @@ export default async function WarehouseLayout({ children }: { children: React.Re
   );
 
   return (
+    <DesktopOnly what="The warehouse console">
     <div className="theme-ops bg-bg text-ink min-h-screen">
       <OpsShell
         brand="Salon OS"
@@ -39,5 +41,6 @@ export default async function WarehouseLayout({ children }: { children: React.Re
         {children}
       </OpsShell>
     </div>
+    </DesktopOnly>
   );
 }

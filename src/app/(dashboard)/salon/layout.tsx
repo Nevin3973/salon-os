@@ -2,6 +2,7 @@ import { requireScopedSession, activeOrgBranding, activeLocationName } from "@/l
 import { OpsShell } from "@/components/ops-shell";
 import { appVersion } from "@/lib/version";
 import { TillLock, LOCKABLE_ID } from "@/components/till-lock";
+import { DesktopOnly } from "@/components/desktop-only";
 
 /**
  * The salon-manager's operational console — the "selling" side, kept separate
@@ -28,6 +29,7 @@ export default async function SalonLayout({ children }: { children: React.ReactN
   ];
 
   return (
+    <DesktopOnly what="The counter">
     <div className="bg-bg text-ink min-h-screen">
       {/* Wrapped so the till lock can make the whole console inert — covering
           it is not enough; it must also leave the tab order. */}
@@ -47,5 +49,6 @@ export default async function SalonLayout({ children }: { children: React.ReactN
       {/* The counter is often a shared device left unattended between customers. */}
       <TillLock userName={session.name} idleMinutes={5} />
     </div>
+    </DesktopOnly>
   );
 }
