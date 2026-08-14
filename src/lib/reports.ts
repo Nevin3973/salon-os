@@ -353,6 +353,15 @@ const SALE_STATUS_LABEL: Record<string, string> = {
 export type SaleDayRow = { key: string; label: string; bills: number; revenueCents: number };
 export type SaleProductRow = { name: string; units: number; revenueCents: number; marginCents: number };
 export type PayRow = { mode: PaymentModeValue; label: string; bills: number; revenueCents: number };
+/** One branch's retail trade. Only populated when the scope spans the whole
+ *  org — a branch manager looking at their own report has nothing to compare. */
+export type SaleBranchRow = {
+  name: string;
+  bills: number;
+  units: number;
+  revenueCents: number;
+  marginCents: number;
+};
 
 export type SalesSummary = {
   range: ReportRange;
@@ -375,6 +384,8 @@ export type SalesSummary = {
   topProducts: SaleProductRow[];
   /** Who sold what, for commission and for spotting who needs coaching. */
   staff: SaleStaffRow[];
+  /** Per-branch split. Empty when the report is already scoped to one branch. */
+  branches: SaleBranchRow[];
 };
 
 /**
@@ -411,6 +422,7 @@ export async function salesSummary(scope: ReportScope, range: ReportRange): Prom
     include: {
       items: { include: { staff: { select: { id: true, name: true, title: true } } } },
       returns: { include: { items: true } },
+      branch: { select: { name: true } },
     },
     orderBy: { createdAt: "desc" },
   });
@@ -427,6 +439,7 @@ export async function salesSummary(scope: ReportScope, range: ReportRange): Prom
   // so the totals still reconcile against the headline revenue.
   const staff = new Map<string, SaleStaffRow>();
   const staffBillSeen = new Map<string, Set<string>>();
+  const branches = new Map<string, SaleBranchRow>();
 
   for (const s of sales) {
     if (s.status === "VOID") {
@@ -459,6 +472,15 @@ export async function salesSummary(scope: ReportScope, range: ReportRange): Prom
     day.revenueCents += netGross;
     days.set(key, day);
 
+    const branchName = s.branch?.name ?? "Unknown branch";
+    const br =
+      branches.get(branchName) ??
+      { name: branchName, bills: 0, units: 0, revenueCents: 0, marginCents: 0 };
+    br.bills++;
+    br.revenueCents += netGross;
+    br.marginCents += s.subtotalCents - creditNet - (s.costCents - returnedCost);
+    branches.set(branchName, br);
+
     const mode = s.paymentMode as PaymentModeValue;
     const pay = payments.get(mode) ?? { mode, label: PAYMENT_MODE_LABEL[mode], bills: 0, revenueCents: 0 };
     pay.bills++;
@@ -471,6 +493,8 @@ export async function salesSummary(scope: ReportScope, range: ReportRange): Prom
       if (keptQty <= 0) continue;
       const keptNet = Math.round((it.lineNetCents * keptQty) / it.qty);
       totals.units += keptQty;
+      const brU = branches.get(s.branch?.name ?? "Unknown branch");
+      if (brU) brU.units += keptQty;
       const p = products.get(it.name) ?? { name: it.name, units: 0, revenueCents: 0, marginCents: 0 };
       p.units += keptQty;
       p.revenueCents += keptNet;
@@ -528,6 +552,11 @@ export async function salesSummary(scope: ReportScope, range: ReportRange): Prom
         products: r.products.sort((a, b) => b.revenueCents - a.revenueCents).slice(0, 8),
       }))
       .sort((a, b) => b.revenueCents - a.revenueCents),
+    // Empty when already scoped to one branch: a single row comparing a branch
+    // to itself is noise, and its presence would imply a comparison exists.
+    branches: scope.branchId
+      ? []
+      : [...branches.values()].sort((a, b) => b.revenueCents - a.revenueCents),
   };
 }
 

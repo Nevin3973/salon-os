@@ -222,7 +222,7 @@ export function PosTerminal({ items, staff }: { items: Sellable[]; staff: StaffO
                   key={p.productId}
                   onClick={() => add(p.productId)}
                   disabled={soldOut}
-                  className={`relative text-left bg-surface border rounded-2xl p-3 min-h-[104px] flex flex-col justify-between transition-all select-none active:scale-[0.97] ${
+                  className={`relative text-left bg-surface border rounded-2xl p-2.5 aspect-square flex flex-col transition-all select-none active:scale-[0.97] ${
                     inCart > 0 ? "border-velvet ring-2 ring-velvet/20" : "border-line active:border-velvet/50"
                   } ${soldOut ? "opacity-45" : ""}`}
                 >
@@ -231,44 +231,47 @@ export function PosTerminal({ items, staff }: { items: Sellable[]; staff: StaffO
                       {inCart}
                     </span>
                   )}
-                  <div className="flex gap-2.5 items-start">
-                    {/* Recognising a bottle is faster than reading a name, so
-                        the shot leads. Products without one fall back to an
-                        initial rather than a broken-image gap. */}
+
+                  {/* Square tiles, so the artwork gets the room. Recognising a
+                      bottle is faster than reading a name, which is the whole
+                      point of a tile over a list; products without a photo fall
+                      back to an initial rather than a broken-image gap. */}
+                  <div className="flex-1 min-h-0 grid place-items-center">
                     {p.imageUrl ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
                         src={p.imageUrl}
                         alt=""
                         loading="lazy"
-                        className="w-11 h-11 rounded-lg object-cover bg-bg shrink-0"
+                        className="max-h-full max-w-full object-contain rounded-lg"
                       />
                     ) : (
                       <span
                         aria-hidden
-                        className="w-11 h-11 rounded-lg bg-velvet-soft text-velvet shrink-0 grid place-items-center font-display text-lg font-bold"
+                        className="w-2/3 aspect-square rounded-xl bg-velvet-soft text-velvet grid place-items-center font-display text-2xl font-bold"
                       >
                         {p.name.charAt(0).toUpperCase()}
                       </span>
                     )}
-                    <div className="min-w-0">
-                    <div className="font-semibold text-sm leading-tight line-clamp-2">{p.name}</div>
-                    <div className="text-xs text-faint mt-0.5 truncate">
+                  </div>
+
+                  <div className="shrink-0 mt-1.5">
+                    <div className="font-semibold text-[13px] leading-tight line-clamp-2">{p.name}</div>
+                    <div className="text-[11px] text-faint truncate">
                       {p.rackId ? (
                         <span className="text-velvet font-semibold">📍 {p.rackId}</span>
                       ) : (
                         p.brand
                       )}
                     </div>
+                    <div className="flex items-baseline justify-between mt-0.5">
+                      <span className="font-bold text-sm tabular-nums">{formatMoney(inclusive(p))}</span>
+                      <span
+                        className={`text-[11px] tabular-nums ${p.onHand <= 3 ? "text-out font-semibold" : "text-faint"}`}
+                      >
+                        {p.onHand} left
+                      </span>
                     </div>
-                  </div>
-                  <div className="flex items-baseline justify-between mt-2">
-                    <span className="font-bold text-base tabular-nums">{formatMoney(inclusive(p))}</span>
-                    <span
-                      className={`text-[11px] tabular-nums ${p.onHand <= 3 ? "text-out font-semibold" : "text-faint"}`}
-                    >
-                      {p.onHand} left
-                    </span>
                   </div>
                 </button>
               );

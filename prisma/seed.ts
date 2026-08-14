@@ -587,7 +587,11 @@ const SAMPLE_CUSTOMERS = [
 
 async function seedBranchStockAndSales(ctx: SeededOrg) {
   const paymentModes = ["CASH", "CARD", "UPI"] as const;
-  const sellable = ctx.products.filter((p) => p.active && p.retailPriceCents > 0);
+  // Gate on the flag, not just on "has a price". Inferring sellability from a
+  // price is what put styling chairs and floor cleaner on the till in the first
+  // place, and the sample bills inherited it — a demo where a salon sells
+  // furniture to walk-ins reads as broken software rather than as sample data.
+  const sellable = ctx.products.filter((p) => p.active && p.sellRetail && p.retailPriceCents > 0);
   let saleNo = 0;
 
   for (let bi = 0; bi < ctx.branches.length; bi++) {

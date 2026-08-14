@@ -16,12 +16,23 @@ const PRESETS: { label: string; days: number }[] = [
   { label: "90 days", days: 90 },
 ];
 
-export function ReportControls({ from, to }: { from: string; to: string }) {
+export function ReportControls({
+  from,
+  to,
+  basePath = "/salon/reports",
+}: {
+  from: string;
+  to: string;
+  /** Where the date change navigates. Defaults to the branch report; head
+   *  office passes its own path, otherwise picking a date would bounce an
+   *  admin to a page their role cannot open. */
+  basePath?: string;
+}) {
   const router = useRouter();
   const [draftFrom, setDraftFrom] = useState(from);
   const [draftTo, setDraftTo] = useState(to);
 
-  const apply = (f: string, t: string) => router.push(`/salon/reports?from=${f}&to=${t}`);
+  const apply = (f: string, t: string) => router.push(`${basePath}?from=${f}&to=${t}`);
 
   function applyPreset(days: number) {
     const end = new Date();
