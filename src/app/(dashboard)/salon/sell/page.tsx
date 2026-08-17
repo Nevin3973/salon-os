@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requireScopedSession } from "@/lib/tenant";
+import { requireScopedSession, activeOrgSettings } from "@/lib/tenant";
 import { PosTerminal, type Sellable, type StaffOption } from "./pos-terminal";
 import { optimizedImage } from "@/lib/cloudinary";
 
@@ -20,7 +20,14 @@ export default async function SellPage() {
   // branch, plus anyone who covers several (branchId null). Read from Staff
   // rather than User, because most stylists never sign in and should not need
   // a login account to be creditable.
-  const staff: StaffOption[] = branchId
+  const settings = await activeOrgSettings();
+
+  // With credit switched off there is nobody to offer, so the till stops
+  // asking rather than showing a prompt with only "Counter" in it — an
+  // unanswerable question is worse than no question.
+  const staff: StaffOption[] = !settings.showStaffCredit
+    ? []
+    : branchId
     ? (
         await db.staff.findMany({
           where: { isActive: true, OR: [{ branchId }, { branchId: null }] },

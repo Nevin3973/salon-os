@@ -15,7 +15,15 @@ import type { SaleStaffRow } from "@/lib/reports";
  * Figures are netted for returns like every other number in this report. A sale
  * that came back is not a sale anyone should be paid for.
  */
-export function StaffSales({ rows }: { rows: SaleStaffRow[] }) {
+export function StaffSales({
+  rows,
+  showMargin = true,
+}: {
+  rows: SaleStaffRow[];
+  /** Head office always sees margin; a branch manager only when the owner
+   *  allows it, because margin discloses what the stock cost. */
+  showMargin?: boolean;
+}) {
   const [open, setOpen] = useState<string | null>(null);
 
   if (rows.length === 0) {
@@ -37,7 +45,7 @@ export function StaffSales({ rows }: { rows: SaleStaffRow[] }) {
             <th className="font-medium px-4 py-3 text-right">Bills</th>
             <th className="font-medium px-4 py-3 text-right">Units</th>
             <th className="font-medium px-4 py-3 text-right">Revenue</th>
-            <th className="font-medium px-4 py-3 text-right">Margin</th>
+            {showMargin && (<th className="font-medium px-4 py-3 text-right">Margin</th>)}
             <th className="font-medium px-4 py-3 w-32">Share</th>
           </tr>
         </thead>
@@ -66,9 +74,11 @@ export function StaffSales({ rows }: { rows: SaleStaffRow[] }) {
                   <td className="px-4 py-3 text-right tabular-nums font-semibold">
                     {formatMoney(r.revenueCents)}
                   </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-muted">
-                    {formatMoney(r.marginCents)}
-                  </td>
+                  {showMargin && (
+                    <td className="px-4 py-3 text-right tabular-nums text-muted">
+                      {formatMoney(r.marginCents)}
+                    </td>
+                  )}
                   <td className="px-4 py-3">
                     <div className="h-1.5 bg-line-soft rounded-full overflow-hidden">
                       <div

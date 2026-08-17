@@ -210,6 +210,40 @@ export async function setProductChannel(input: {
   return { ok: true };
 }
 
+/**
+ * Owner-level switches that change what a branch sees and is asked.
+ *
+ * Both default to the safer answer rather than the more featureful one:
+ * staff credit ON (most salons run some form of it, and an unanswered prompt
+ * is better than silently uncredited revenue) and cost visibility OFF
+ * (supplier pricing is the owner's commercial position, not the branch's).
+ */
+export async function setOrgSettings(input: {
+  showStaffCredit: boolean;
+  showCostToManager: boolean;
+}): Promise<AdminResult> {
+  const parsed = z
+    .object({ showStaffCredit: z.boolean(), showCostToManager: z.boolean() })
+    .safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid setting." };
+
+  const { session } = await requireVerifiedScopedSession("SUPER_ADMIN");
+  await prisma.org.update({ where: { id: session.orgId }, data: parsed.data });
+  await logAudit(prisma, {
+    orgId: session.orgId,
+    userId: session.userId,
+    userName: session.name,
+    action: `Sales credit ${parsed.data.showStaffCredit ? "on" : "off"}, cost visible to managers ${
+      parsed.data.showCostToManager ? "yes" : "no"
+    }`,
+    entityType: "Org",
+    entityId: session.orgId,
+  });
+  // These change the till and every branch report, so nothing narrower will do.
+  revalidatePath("/", "layout");
+  return { ok: true };
+}
+
 // ————— Branding —————
 
 /**

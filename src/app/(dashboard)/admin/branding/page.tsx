@@ -2,6 +2,7 @@ import { requireScopedSession } from "@/lib/tenant";
 import { prisma } from "@/lib/db";
 import { PRODUCT_NAME, PRODUCT_TAGLINE } from "@/lib/brand";
 import { LogoPanel } from "./logo-panel";
+import { SettingsPanel } from "./settings-panel";
 
 /**
  * Where a salon sets its own identity inside the product.
@@ -15,18 +16,23 @@ export default async function AdminBrandingPage() {
   const { session } = await requireScopedSession("SUPER_ADMIN");
   const org = await prisma.org.findUnique({
     where: { id: session.orgId },
-    select: { name: true, logoUrl: true },
+    select: { name: true, logoUrl: true, showStaffCredit: true, showCostToManager: true },
   });
 
   return (
     <div>
-      <h1 className="text-2xl font-semibold">Branding</h1>
+      <h1 className="text-2xl font-semibold">Branding &amp; settings</h1>
       <p className="text-muted text-sm mt-1 max-w-xl">
         Your salon&rsquo;s logo appears beside its name in every console. {PRODUCT_NAME} stays{" "}
         {PRODUCT_TAGLINE}, shown separately above it.
       </p>
 
       <LogoPanel orgName={org?.name ?? ""} logoUrl={org?.logoUrl ?? null} />
+
+      <SettingsPanel
+        showStaffCredit={org?.showStaffCredit ?? true}
+        showCostToManager={org?.showCostToManager ?? false}
+      />
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { requireScopedSession } from "@/lib/tenant";
+import { requireScopedSession, activeOrgSettings } from "@/lib/tenant";
 import { formatMoney } from "@/lib/money";
 import { fmtDate } from "@/lib/format";
 import { salesSummary, parseRange } from "@/lib/reports";
@@ -28,6 +28,7 @@ export default async function SalonReportsPage({
   const toStr = iso(range.to ?? end);
   const qs = `from=${fromStr}&to=${toStr}`;
 
+  const orgSettings = await activeOrgSettings();
   const summary = await salesSummary({ orgId: session.orgId, branchId: session.locationId ?? null }, range);
   const { totals, days, payments, topProducts, staff } = summary;
   const peak = Math.max(1, ...days.map((d) => d.revenueCents));
@@ -61,7 +62,12 @@ export default async function SalonReportsPage({
           { label: "Revenue", value: formatMoney(totals.grossCents), tone: "accent" },
           { label: "Taxable value", value: formatMoney(totals.netCents) },
           { label: "GST collected", value: formatMoney(totals.taxCents) },
-          { label: "Gross margin", value: formatMoney(totals.marginCents), tone: "in" },
+          // Margin is what stock cost subtracted from what it sold for, so
+          // showing it here would hand a branch the supplier pricing the owner
+          // chose to keep. Gated, not removed — the owner can switch it on.
+          ...(orgSettings.showCostToManager
+            ? [{ label: "Gross margin", value: formatMoney(totals.marginCents), tone: "in" as const }]
+            : []),
           { label: "Units sold", value: totals.units },
         ]}
       />
@@ -118,7 +124,7 @@ export default async function SalonReportsPage({
           Sales by staff
           <span className="font-normal text-muted"> · tap a row for their products</span>
         </h2>
-        <StaffSales rows={staff} />
+        <StaffSales rows={staff} showMargin={orgSettings.showCostToManager} />
       </section>
 
       <div className="grid gap-5 lg:grid-cols-2">
@@ -131,7 +137,9 @@ export default async function SalonReportsPage({
                 <th className="font-medium px-4 py-2.5">Product</th>
                 <th className="font-medium px-4 py-2.5 text-right">Units</th>
                 <th className="font-medium px-4 py-2.5 text-right">Revenue</th>
-                <th className="font-medium px-4 py-2.5 text-right">Margin</th>
+                {orgSettings.showCostToManager && (
+                  <th className="font-medium px-4 py-2.5 text-right">Margin</th>
+                )}
               </tr>
             </thead>
             <tbody>
@@ -140,7 +148,9 @@ export default async function SalonReportsPage({
                   <td className="px-4 py-2.5 text-ink">{p.name}</td>
                   <td className="px-4 py-2.5 text-right tabular-nums text-muted">{p.units}</td>
                   <td className="px-4 py-2.5 text-right tabular-nums text-ink font-medium whitespace-nowrap">{formatMoney(p.revenueCents)}</td>
-                  <td className="px-4 py-2.5 text-right tabular-nums text-in whitespace-nowrap">{formatMoney(p.marginCents)}</td>
+                  {orgSettings.showCostToManager && (
+                    <td className="px-4 py-2.5 text-right tabular-nums text-in whitespace-nowrap">{formatMoney(p.marginCents)}</td>
+                  )}
                 </tr>
               ))}
               {topProducts.length === 0 && (

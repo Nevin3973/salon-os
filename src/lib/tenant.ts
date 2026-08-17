@@ -216,6 +216,33 @@ export async function activeOrgName(): Promise<string> {
  * Admin would appear to have silently failed for up to an hour. A salon
  * changing its own branding expects to see it immediately.
  */
+/**
+ * Owner-level display switches for the active org.
+ *
+ * Read from the database, not the session token: an owner flipping one expects
+ * the till and the branch reports to change on the next page load, not after
+ * the hourly token refresh.
+ *
+ * Falls back to the safe answer when there is no org — credit on, cost hidden —
+ * so a missing record can never quietly expose supplier pricing.
+ */
+export async function activeOrgSettings(): Promise<{
+  showStaffCredit: boolean;
+  showCostToManager: boolean;
+}> {
+  const session = await auth();
+  const orgId = session?.activeOrgId;
+  if (!orgId) return { showStaffCredit: true, showCostToManager: false };
+  const org = await prisma.org.findUnique({
+    where: { id: orgId },
+    select: { showStaffCredit: true, showCostToManager: true },
+  });
+  return {
+    showStaffCredit: org?.showStaffCredit ?? true,
+    showCostToManager: org?.showCostToManager ?? false,
+  };
+}
+
 export async function activeOrgBranding(): Promise<{ name: string; logoUrl: string | null }> {
   const session = await auth();
   const orgId = session?.activeOrgId;

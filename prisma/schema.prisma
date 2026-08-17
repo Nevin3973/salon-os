@@ -34,6 +34,15 @@ model Org {
   gstin     String?
   /// Registered legal name for the tax-invoice header (falls back to `name`).
   legalName String?
+  /// Whether the till asks who the sale should be credited to. Off for salons
+  /// that do not run commission — the prompt is then a field staff must dismiss
+  /// on every bill, which is how it ends up answered wrongly.
+  showStaffCredit   Boolean @default(true)
+  /// Whether a branch manager may see what stock COST and the margin on it.
+  /// Off by default: a manager needs the retail price to sell and to reconcile
+  /// a till, and supplier pricing is the owner's commercial position, not the
+  /// branch's. The owner always sees both.
+  showCostToManager Boolean @default(false)
   /// The salon's own logo, shown beside its name in the console. Cloudinary URL,
   /// uploaded in Admin → Branding. Null is normal: the UI falls back to a
   /// monogram, so a salon that never uploads one still looks finished.
