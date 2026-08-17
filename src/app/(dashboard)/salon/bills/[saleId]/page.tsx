@@ -6,7 +6,6 @@ import { fmtDateTime } from "@/lib/format";
 import { formatMoney } from "@/lib/money";
 import { lineGst, gstBreakdown } from "@/lib/gst";
 import { PAYMENT_MODE_LABEL, type PaymentModeValue } from "@/lib/constants";
-import { POWERED_BY } from "@/lib/brand";
 import { InvoiceActions } from "./invoice-actions";
 
 export default async function InvoicePage({
@@ -245,7 +244,11 @@ export default async function InvoicePage({
         )}
 
         <div className="receipt-center text-[11px] text-faint mt-6 pt-4 border-t border-line">
-          Sold by {seller?.name ?? "—"} · {sellerName} · Powered by {POWERED_BY}
+          {/* No vendor mark on a customer's tax invoice. This document belongs
+              to the salon and goes to their customer; our name on it is our
+              advertising on their paperwork. The attribution stays in the
+              software chrome and on the internal procurement reports. */}
+          Sold by {seller?.name ?? "—"} · {sellerName}
         </div>
       </div>
     </div>

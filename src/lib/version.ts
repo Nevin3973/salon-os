@@ -42,8 +42,13 @@ export function appVersion(): {
   };
 }
 
-/** Compact form for the console footer: `v1.5.14 · ed2f219`. */
+/**
+ * What the console footer shows: the release number and nothing else.
+ *
+ * The commit used to be appended here. It means nothing to a salon owner and
+ * read as noise beside a version — the people who need it look at /system or
+ * /api/health, where it is still reported in full.
+ */
 export function versionLabel(): string {
-  const v = appVersion();
-  return `v${v.version} · ${v.commit}`;
+  return `v${appVersion().version}`;
 }

@@ -1,6 +1,4 @@
-import { notFound } from "next/navigation";
-import { auth } from "@/auth";
-import { isDeveloper } from "@/lib/developer";
+import { requireScopedSession } from "@/lib/tenant";
 import { prisma } from "@/lib/db";
 import { limiterBackend } from "@/lib/rate-limit";
 import { observabilityEnabled } from "@/lib/observability";
@@ -16,10 +14,10 @@ const BACKUP_STALE_HOURS = 36;
 type Level = "ok" | "warn" | "bad";
 
 export default async function SystemPage() {
-  // notFound() rather than a "forbidden" screen: an admin who wanders here
-  // should not learn that a maintenance console exists at all.
-  const session = await auth();
-  if (!isDeveloper(session?.user?.email)) notFound();
+  // The account owner, not a separate allowlist. A second list of who counts
+  // as staff was one more thing to keep in step with reality, and the person
+  // accountable for the platform is already the super admin.
+  await requireScopedSession("SUPER_ADMIN");
 
   // Measured here, not read from a cache: an indicator that reports a stored
   // value tells you the system was healthy once, which is not the question.
