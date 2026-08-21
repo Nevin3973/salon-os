@@ -1,7 +1,8 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { getScopedDb } from "@/lib/tenant";
-import { resolveOrgContext, unauthorized } from "@/server/api/auth";
+import { unauthorized } from "@/server/api/auth";
+import { resolveTallyContext } from "@/server/api/tally-auth";
 
 /// Tally integration — import acknowledgement.
 ///
@@ -13,15 +14,16 @@ import { resolveOrgContext, unauthorized } from "@/server/api/auth";
 type AckItem = { REF?: unknown; VOUCHERNO?: unknown; ERROR?: unknown };
 
 export async function POST(req: NextRequest) {
-  const ctx = await resolveOrgContext(req);
-  if (!ctx) return unauthorized();
-
   let body: { acks?: unknown };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "Body must be JSON." }, { status: 400 });
   }
+
+  // Authenticated after parsing: the connector's key may arrive in the body.
+  const ctx = await resolveTallyContext(req, body as Record<string, unknown>);
+  if (!ctx) return unauthorized();
 
   if (!Array.isArray(body.acks)) {
     return NextResponse.json({ error: "Expected { acks: [ { REF, VOUCHERNO } ] }." }, { status: 400 });

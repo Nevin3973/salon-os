@@ -1,7 +1,8 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { getScopedDb } from "@/lib/tenant";
-import { resolveOrgContext, unauthorized } from "@/server/api/auth";
+import { unauthorized } from "@/server/api/auth";
+import { resolveTallyContext } from "@/server/api/tally-auth";
 import { parseIstDate, toTallyDate } from "@/lib/tally/format";
 
 /// Tally integration — outbound voucher feed.
@@ -23,15 +24,16 @@ const AGREED_TYPES = ["SALE"];
 const KNOWN_TYPES = ["SALE", "SALE_RETURN", "VOID", "ALLOCATION", "BRANCH_RETURN", "WRITE_OFF"];
 
 export async function POST(req: NextRequest) {
-  const ctx = await resolveOrgContext(req);
-  if (!ctx) return unauthorized();
-
   let body: Record<string, unknown>;
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "Body must be JSON." }, { status: 400 });
   }
+
+  // Authenticated after parsing: the connector's key may arrive in the body.
+  const ctx = await resolveTallyContext(req, body as Record<string, unknown>);
+  if (!ctx) return unauthorized();
 
   const from = parseIstDate(body.from_date);
   const to = parseIstDate(body.to_date, true);
