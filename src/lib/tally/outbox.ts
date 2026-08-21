@@ -1,5 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import { amt, rate, toTallyDate } from "./format";
+import { orderCode } from "@/lib/format";
 
 /// Emitters for the Tally outbound queue.
 ///
@@ -208,5 +209,165 @@ export async function emitVoid(tx: Tx, orgId: string, saleId: string) {
     externalRef: payload.REF,
     payload,
     occurredAt: sale.updatedAt,
+  });
+}
+
+/// Stock moving from the central warehouse to a salon, against an approved
+/// request. The largest value flowing through the business, and the flow the
+/// platform exists to track.
+///
+/// The Tally voucher this becomes is still open: an internal stock transfer if
+/// the salons are branches of one legal entity, or a sales invoice if they are
+/// separate companies. The payload therefore carries everything BOTH readings
+/// need -- quantities, the branch, and the transfer value at purchase rate --
+/// and leaves the voucher choice to the connector.
+///
+/// Valued at the PURCHASE rate, per the client's pricing rule: goods supplied
+/// to a salon move at cost, and only the salon's own retail sale is at MRP.
+export async function emitAllocation(
+  tx: Tx,
+  orgId: string,
+  orderId: string,
+  dispatched: Array<{ productId: string; qty: number }>,
+) {
+  if (!dispatched.length) return;
+
+  const order = await tx.order.findFirst({
+    where: { id: orderId, orgId },
+    include: {
+      items: { include: { product: { select: { name: true, hsn: true, gstRate: true, sku: true } } } },
+      branch: { select: { name: true, invoicePrefix: true } },
+    },
+  });
+  if (!order || order.origin !== "SALON_OS") return;
+
+  const byProduct = new Map(order.items.map((it) => [it.productId, it]));
+  const lines = dispatched
+    .map((d) => ({ d, it: byProduct.get(d.productId) }))
+    .filter((x): x is { d: { productId: string; qty: number }; it: NonNullable<typeof x.it> } => Boolean(x.it))
+    .map(({ d, it }) => ({
+      productId: d.productId,
+      qty: d.qty,
+      name: it.product.name,
+      sku: it.product.sku,
+      hsn: it.product.hsn,
+      gstRate: it.product.gstRate,
+      unitPriceCents: it.unitPriceCents,
+    }));
+  if (!lines.length) return;
+
+  // An order can be dispatched in several passes. Counting deliveries already
+  // recorded gives a value that strictly increases per pass, so each pass gets
+  // its own voucher reference and a replay of one pass cannot collide with
+  // another. Called after the delivery rows are written, so this pass counts.
+  const deliveries = await tx.orderItemDelivery.count({
+    where: { orderItem: { orderId: order.id }, kind: "DISPATCH" },
+  });
+
+  const now = new Date();
+  const payload = {
+    REF: `SO-ALLOC-${orderCode(order.orderNo)}-D${deliveries}`,
+    TYPE: "ALLOCATION",
+    TRANSDATE: toTallyDate(now),
+    ORDERNO: orderCode(order.orderNo),
+    /// Receiving salon. Whether this is a godown, a cost centre or a separate
+    /// company in Tally is the partner's mapping decision.
+    TOBRANCH: { CODE: order.branch.invoicePrefix ?? "", NAME: order.branch.name },
+    STOCKITEM: stockItems(lines),
+    DETAIL: lines.map((li) => ({
+      STOCKITEMNAME: li.name,
+      PRDCODE: li.sku,
+      HSNCODE: li.hsn ?? "",
+      QTY: li.qty.toFixed(4),
+      RATE: amt(li.unitPriceCents),
+      NETAMT: amt(li.qty * li.unitPriceCents),
+      TAXPER: rate(li.gstRate),
+    })),
+    TOTALS: {
+      NETAMT: amt(lines.reduce((s, li) => s + li.qty * li.unitPriceCents, 0)),
+    },
+  };
+
+  await enqueue(tx, {
+    orgId,
+    branchId: order.branchId,
+    eventType: "ALLOCATION",
+    entityId: order.id,
+    externalRef: payload.REF,
+    payload,
+    occurredAt: now,
+  });
+}
+
+/// Stock going back from a salon to the warehouse -- damaged, over-delivered,
+/// or no longer needed. The reverse of an allocation, and valued the same way.
+export async function emitBranchReturn(
+  tx: Tx,
+  orgId: string,
+  orderId: string,
+  returned: Array<{ productId: string; qty: number }>,
+  reason: string,
+) {
+  if (!returned.length) return;
+
+  const order = await tx.order.findFirst({
+    where: { id: orderId, orgId },
+    include: {
+      items: { include: { product: { select: { name: true, hsn: true, gstRate: true, sku: true } } } },
+      branch: { select: { name: true, invoicePrefix: true } },
+    },
+  });
+  if (!order || order.origin !== "SALON_OS") return;
+
+  const byProduct = new Map(order.items.map((it) => [it.productId, it]));
+  const lines = returned
+    .map((r) => ({ r, it: byProduct.get(r.productId) }))
+    .filter((x): x is { r: { productId: string; qty: number }; it: NonNullable<typeof x.it> } => Boolean(x.it))
+    .map(({ r, it }) => ({
+      productId: r.productId,
+      qty: r.qty,
+      name: it.product.name,
+      sku: it.product.sku,
+      hsn: it.product.hsn,
+      gstRate: it.product.gstRate,
+      unitPriceCents: it.unitPriceCents,
+    }));
+  if (!lines.length) return;
+
+  const returns = await tx.orderItemDelivery.count({
+    where: { orderItem: { orderId: order.id }, kind: "RETURN" },
+  });
+
+  const now = new Date();
+  const payload = {
+    REF: `SO-BRET-${orderCode(order.orderNo)}-R${returns}`,
+    TYPE: "BRANCH_RETURN",
+    TRANSDATE: toTallyDate(now),
+    ORDERNO: orderCode(order.orderNo),
+    REASON: reason,
+    FROMBRANCH: { CODE: order.branch.invoicePrefix ?? "", NAME: order.branch.name },
+    STOCKITEM: stockItems(lines),
+    DETAIL: lines.map((li) => ({
+      STOCKITEMNAME: li.name,
+      PRDCODE: li.sku,
+      HSNCODE: li.hsn ?? "",
+      QTY: li.qty.toFixed(4),
+      RATE: amt(li.unitPriceCents),
+      NETAMT: amt(li.qty * li.unitPriceCents),
+      TAXPER: rate(li.gstRate),
+    })),
+    TOTALS: {
+      NETAMT: amt(lines.reduce((s, li) => s + li.qty * li.unitPriceCents, 0)),
+    },
+  };
+
+  await enqueue(tx, {
+    orgId,
+    branchId: order.branchId,
+    eventType: "BRANCH_RETURN",
+    entityId: order.id,
+    externalRef: payload.REF,
+    payload,
+    occurredAt: now,
   });
 }
