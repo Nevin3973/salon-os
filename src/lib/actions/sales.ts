@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { emitSale, emitSaleReturn, emitVoid } from "@/lib/tally/outbox";
+import { consumeBatchesFEFO } from "@/lib/batch-allocation";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { requireVerifiedSession, setOrgConfig, withOrg } from "@/lib/tenant";
@@ -233,6 +235,10 @@ export async function recordSale(input: {
             reason: "Sale",
             userId: session.userId,
           });
+          // Retire the oldest dated lots first. Best effort by design: the
+          // register may not cover every unit on the shelf, and a sale must
+          // never fail because a lot was never recorded.
+          await consumeBatchesFEFO(tx, session.orgId, it.productId, branchId, it.qty);
         } catch (e) {
           if (e instanceof Error && e.message === "BRANCH_STOCK_NEGATIVE") {
             throw new Error(`SHORT:${it.productId}`);
@@ -315,6 +321,7 @@ export async function recordSale(input: {
       });
 
       const units = items.reduce((s, it) => s + it.qty, 0);
+      await emitSale(tx, session.orgId, sale.id);
       await logAudit(tx, {
         orgId: session.orgId,
         userId: session.userId,
@@ -397,6 +404,7 @@ export async function voidSale(input: {
         data: { status: "VOID", voidReason: parsed.data.reason },
       });
 
+      await emitVoid(tx, session.orgId, sale.id);
       await logAudit(tx, {
         orgId: session.orgId,
         userId: session.userId,
@@ -580,6 +588,9 @@ export async function returnSaleItems(input: {
       });
 
       const units = returnItems.reduce((s, r) => s + r.qty, 0);
+      // Credit note queued for Tally inside the same transaction: the
+      // event cannot exist without the return, or the return without it.
+      await emitSaleReturn(tx, session.orgId, credit.id);
       await logAudit(tx, {
         orgId: session.orgId,
         userId: session.userId,

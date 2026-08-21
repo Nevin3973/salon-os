@@ -8,6 +8,8 @@ import { requireVerifiedSession, setOrgConfig } from "@/lib/tenant";
 import { logAudit } from "@/lib/audit";
 import { reportError } from "@/lib/observability";
 import { orderCode, fmtDate } from "@/lib/format";
+import { emitAllocation, emitBranchReturn } from "@/lib/tally/outbox";
+import { transferBatchesFEFO } from "@/lib/batch-allocation";
 import { allocateDispatch } from "@/lib/allocation";
 import { bumpBranchStock } from "@/lib/branch-stock";
 import { notifyDispatch, notifyRejected, notifyReturn } from "@/lib/notify";
@@ -143,6 +145,11 @@ export async function applyDispatch(input: {
           await tx.orderItemDelivery.create({
             data: { orderItemId: a.it.id, qty: a.q, dispatchedByUserId: session.userId },
           });
+          // The dated lots travel with the units, earliest expiry first.
+          // Without this the branch holds stock with no date attached and its
+          // expiry report stays empty however much short-dated stock it has.
+          await transferBatchesFEFO(tx, session.orgId, a.it.productId, order.branchId, a.q);
+
           // Goods delivered to the branch land on its shelf, ready to sell.
           await bumpBranchStock(tx, {
             orgId: session.orgId,
@@ -175,6 +182,15 @@ export async function applyDispatch(input: {
           await tx.product.update({ where: { id: pid }, data: { stock: cur } });
         }
       }
+
+      // Queue the allocation for Tally in the same transaction as the stock
+      // movement it describes, so neither can exist without the other.
+      await emitAllocation(
+        tx,
+        session.orgId,
+        order.id,
+        alloc.filter((a) => a.q > 0).map((a) => ({ productId: a.it.productId, qty: a.q })),
+      );
 
       // 5. Status transition.
       const fullyDelivered = alloc.every((a) => a.remainingAfter <= 0);
@@ -358,6 +374,7 @@ export async function returnOrder(input: {
       const stockOf = new Map(products.map((p) => [p.id, p.stock]));
 
       const detail: string[] = [];
+      const returnedLines: Array<{ productId: string; qty: number }> = [];
       for (const item of order.items) {
         // Clamp to what the branch actually holds, whatever the client sent.
         const qty = Math.min(Math.max(0, askedFor.get(item.id) ?? 0), item.deliveredQty);
@@ -371,6 +388,7 @@ export async function returnOrder(input: {
         await tx.orderItemDelivery.create({
           data: { orderItemId: item.id, qty, kind: "RETURN", dispatchedByUserId: session.userId },
         });
+        returnedLines.push({ productId: item.productId, qty });
         await tx.orderItem.update({
           where: { id: item.id },
           data: { deliveredQty: item.deliveredQty - qty, returnedQty: item.returnedQty + qty },
@@ -418,6 +436,8 @@ export async function returnOrder(input: {
           closureNote: note || null,
         },
       });
+
+      await emitBranchReturn(tx, session.orgId, order.id, returnedLines, reason);
 
       await logAudit(tx, {
         orgId: session.orgId,
