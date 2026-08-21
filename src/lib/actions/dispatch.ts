@@ -9,6 +9,7 @@ import { logAudit } from "@/lib/audit";
 import { reportError } from "@/lib/observability";
 import { orderCode, fmtDate } from "@/lib/format";
 import { emitAllocation, emitBranchReturn } from "@/lib/tally/outbox";
+import { transferBatchesFEFO } from "@/lib/batch-allocation";
 import { allocateDispatch } from "@/lib/allocation";
 import { bumpBranchStock } from "@/lib/branch-stock";
 import { notifyDispatch, notifyRejected, notifyReturn } from "@/lib/notify";
@@ -144,6 +145,11 @@ export async function applyDispatch(input: {
           await tx.orderItemDelivery.create({
             data: { orderItemId: a.it.id, qty: a.q, dispatchedByUserId: session.userId },
           });
+          // The dated lots travel with the units, earliest expiry first.
+          // Without this the branch holds stock with no date attached and its
+          // expiry report stays empty however much short-dated stock it has.
+          await transferBatchesFEFO(tx, session.orgId, a.it.productId, order.branchId, a.q);
+
           // Goods delivered to the branch land on its shelf, ready to sell.
           await bumpBranchStock(tx, {
             orgId: session.orgId,
