@@ -1,5 +1,5 @@
 import { Prisma } from "@prisma/client";
-import type { PrismaClient } from "@prisma/client";
+import { withOrg } from "@/lib/tenant";
 
 /// Stock Item Summary — opening, movement and closing per product.
 ///
@@ -74,86 +74,98 @@ function bucket(row: StockSummaryRow, cat: string, kind: string, delta: number) 
 }
 
 /// Per-product summary for one branch over [from, to).
+/// Runs inside withOrg rather than taking a caller's client.
+///
+/// These are raw statements, and every table they touch is behind FORCE row
+/// level security keyed on `app.org_id`. That setting is established by
+/// withOrg's transaction — the scoped client from requireScopedSession applies
+/// its filtering in the query builder and never sets it, so raw SQL issued
+/// through that client matches no rows at all. It returns an empty report
+/// rather than an error, which is the kind of failure that reaches production
+/// looking like a quiet week of trading.
 export async function branchStockSummary(
-  db: PrismaClient,
+  orgId: string,
   branchId: string,
   from: Date,
   to: Date,
 ): Promise<StockSummaryRow[]> {
-  const deltas = await db.$queryRaw<DeltaRow[]>(Prisma.sql`
-    SELECT m."productId",
-           m.kind::text AS kind,
-           split_part(m.reason, ' · ', 1) AS cat,
-           SUM(m."newQty" - m."prevQty") AS delta
-      FROM "BranchStockMovement" m
-     WHERE m."branchId" = ${branchId}
-       AND m."createdAt" >= ${from}
-       AND m."createdAt" <  ${to}
-     GROUP BY 1, 2, 3
-  `);
-
-  // Opening balance is the prevQty of the first movement inside the period;
-  // where a product did not move at all, it is the newQty of the last movement
-  // before it. A product with no history either way opens at zero.
-  const openings = await db.$queryRaw<OpenRow[]>(Prisma.sql`
-    WITH first_in AS (
-      SELECT DISTINCT ON (m."productId", m.kind)
-             m."productId", m.kind::text AS kind, m."prevQty" AS bal
+  return withOrg(orgId, async (db) => {
+    const deltas = (await db.$queryRaw(Prisma.sql`
+      SELECT m."productId",
+             m.kind::text AS kind,
+             split_part(m.reason, ' · ', 1) AS cat,
+             SUM(m."newQty" - m."prevQty") AS delta
         FROM "BranchStockMovement" m
        WHERE m."branchId" = ${branchId}
          AND m."createdAt" >= ${from}
          AND m."createdAt" <  ${to}
-       ORDER BY m."productId", m.kind, m."createdAt" ASC, m.id ASC
-    ),
-    last_before AS (
-      SELECT DISTINCT ON (m."productId", m.kind)
-             m."productId", m.kind::text AS kind, m."newQty" AS bal
-        FROM "BranchStockMovement" m
-       WHERE m."branchId" = ${branchId}
-         AND m."createdAt" < ${from}
-       ORDER BY m."productId", m.kind, m."createdAt" DESC, m.id DESC
-    )
-    SELECT COALESCE(f."productId", l."productId") AS "productId",
-           COALESCE(f.kind, l.kind)              AS kind,
-           COALESCE(f.bal,  l.bal)               AS bal
-      FROM first_in f
-      FULL OUTER JOIN last_before l
-        ON l."productId" = f."productId" AND l.kind = f.kind
-  `);
+       GROUP BY 1, 2, 3
+    `)) as DeltaRow[];
 
-  const ids = new Set<string>();
-  for (const d of deltas) ids.add(d.productId);
-  for (const o of openings) ids.add(o.productId);
-  if (!ids.size) return [];
+    // Opening balance is the prevQty of the first movement inside the period;
+    // where a product did not move at all, it is the newQty of the last movement
+    // before it. A product with no history either way opens at zero.
+    const openings = (await db.$queryRaw(Prisma.sql`
+      WITH first_in AS (
+        SELECT DISTINCT ON (m."productId", m.kind)
+               m."productId", m.kind::text AS kind, m."prevQty" AS bal
+          FROM "BranchStockMovement" m
+         WHERE m."branchId" = ${branchId}
+           AND m."createdAt" >= ${from}
+           AND m."createdAt" <  ${to}
+         ORDER BY m."productId", m.kind, m."createdAt" ASC, m.id ASC
+      ),
+      last_before AS (
+        SELECT DISTINCT ON (m."productId", m.kind)
+               m."productId", m.kind::text AS kind, m."newQty" AS bal
+          FROM "BranchStockMovement" m
+         WHERE m."branchId" = ${branchId}
+           AND m."createdAt" < ${from}
+         ORDER BY m."productId", m.kind, m."createdAt" DESC, m.id DESC
+      )
+      SELECT COALESCE(f."productId", l."productId") AS "productId",
+             COALESCE(f.kind, l.kind)              AS kind,
+             COALESCE(f.bal,  l.bal)               AS bal
+        FROM first_in f
+        FULL OUTER JOIN last_before l
+          ON l."productId" = f."productId" AND l.kind = f.kind
+    `)) as OpenRow[];
 
-  const products = await db.product.findMany({
-    where: { id: { in: [...ids] } },
-    select: { id: true, sku: true, name: true, unit: true, category: true },
+    const ids = new Set<string>();
+    for (const d of deltas) ids.add(d.productId);
+    for (const o of openings) ids.add(o.productId);
+    if (!ids.size) return [];
+
+    const products = (await db.$queryRaw(Prisma.sql`
+      SELECT id, sku, name, unit, category
+        FROM "Product"
+       WHERE id IN (${Prisma.join([...ids])})
+    `)) as Array<{ id: string; sku: string; name: string; unit: string; category: string }>;
+
+    const rows = new Map<string, StockSummaryRow>();
+    for (const p of products) {
+      rows.set(p.id, {
+        productId: p.id, sku: p.sku, name: p.name, unit: p.unit, category: p.category,
+        opening: 0, inward: 0, outward: 0, salonUse: 0,
+        returns: 0, toWarehouse: 0, adjustments: 0, closing: 0,
+      });
+    }
+
+    for (const o of openings) {
+      const row = rows.get(o.productId);
+      if (row) row.opening += n(o.bal);
+    }
+    for (const d of deltas) {
+      const row = rows.get(d.productId);
+      if (row) bucket(row, d.cat, d.kind, n(d.delta));
+    }
+
+    for (const row of rows.values()) {
+      row.closing =
+        row.opening + row.inward - row.outward - row.salonUse + row.returns
+        - row.toWarehouse + row.adjustments;
+    }
+
+    return [...rows.values()].sort((a, b) => a.name.localeCompare(b.name));
   });
-
-  const rows = new Map<string, StockSummaryRow>();
-  for (const p of products) {
-    rows.set(p.id, {
-      productId: p.id, sku: p.sku, name: p.name, unit: p.unit, category: p.category,
-      opening: 0, inward: 0, outward: 0, salonUse: 0,
-      returns: 0, toWarehouse: 0, adjustments: 0, closing: 0,
-    });
-  }
-
-  for (const o of openings) {
-    const row = rows.get(o.productId);
-    if (row) row.opening += n(o.bal);
-  }
-  for (const d of deltas) {
-    const row = rows.get(d.productId);
-    if (row) bucket(row, d.cat, d.kind, n(d.delta));
-  }
-
-  for (const row of rows.values()) {
-    row.closing =
-      row.opening + row.inward - row.outward - row.salonUse + row.returns
-      - row.toWarehouse + row.adjustments;
-  }
-
-  return [...rows.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
