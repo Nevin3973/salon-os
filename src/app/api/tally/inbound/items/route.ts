@@ -52,9 +52,24 @@ export async function POST(req: NextRequest) {
 
   // Authenticated after parsing: the connector's key may arrive in the body.
   const ctx = await resolveTallyContext(req, body as Record<string, unknown>);
+  if (ctx === "RATE_LIMITED") {
+    return NextResponse.json(
+      { error: "Too many failed attempts. Try again shortly." },
+      { status: 429 },
+    );
+  }
   if (!ctx) return unauthorized();
   if (!Array.isArray(body.items)) {
     return NextResponse.json({ error: "Expected { items: [ … ] }." }, { status: 400 });
+  }
+  // A trusted caller, but a full master export arriving as one payload would
+  // hold a transaction open while it looped. Capped so an accidental bulk send
+  // is a clear error rather than an outage.
+  if (body.items.length > 5000) {
+    return NextResponse.json(
+      { error: "Too many items in one request. Send at most 5000 and page the rest." },
+      { status: 413 },
+    );
   }
 
   const created: string[] = [];

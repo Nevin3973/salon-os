@@ -139,3 +139,81 @@ describe("Postgres row-level security", () => {
     ).rejects.toThrow();
   });
 });
+
+describe("Row-level security on the Tally and expiry tables", () => {
+  /**
+   * These two tables came later than the rest and carry the most sensitive
+   * payloads in the system, so they get the same fail-closed treatment.
+   *
+   * TallyOutbox is the sharper of the two: each row holds a complete bill —
+   * customer name, GSTIN, every line and every amount — and it is read by an
+   * API key rather than a signed-in person. A gap here would hand one salon
+   * group's entire sales ledger to another group's connector, over the public
+   * internet, with no session to trace it back to.
+   */
+
+  it("gives up nothing from the outbox with no org context", async () => {
+    expect(await prisma.tallyOutbox.count()).toBe(0);
+    expect(await prisma.productBatch.count()).toBe(0);
+  });
+
+  it("refuses to queue an outbox row under another org's id", async () => {
+    await expect(
+      withOrgTx(orgAId, (tx) =>
+        tx.tallyOutbox.create({
+          data: {
+            orgId: orgBId,
+            eventType: "SALE",
+            entityId: "rls-probe",
+            externalRef: `RLS-PROBE-${Date.now()}`,
+            payload: {},
+            occurredAt: new Date(),
+          },
+        })
+      )
+    ).rejects.toThrow();
+  });
+
+  it("refuses to record a batch under another org's id", async () => {
+    await expect(
+      withOrgTx(orgAId, (tx) =>
+        tx.productBatch.create({
+          data: {
+            orgId: orgBId,
+            productId: "rls-probe",
+            batchNo: `RLS-${Date.now()}`,
+            expiryDate: new Date(),
+            qty: 1,
+          },
+        })
+      )
+    ).rejects.toThrow();
+  });
+
+  it("walls each tenant's queued events off from the other", async () => {
+    const ref = `RLS-ISOLATION-${Date.now()}`;
+    await withOrgTx(orgAId, (tx) =>
+      tx.tallyOutbox.create({
+        data: {
+          orgId: orgAId,
+          eventType: "SALE",
+          entityId: "rls-probe",
+          externalRef: ref,
+          payload: { REF: ref },
+          occurredAt: new Date(),
+        },
+      })
+    );
+
+    try {
+      const own = await withOrgTx(orgAId, (tx) => tx.tallyOutbox.count({ where: { externalRef: ref } }));
+      const other = await withOrgTx(orgBId, (tx) => tx.tallyOutbox.count({ where: { externalRef: ref } }));
+      // Asking by exact reference: the row is there for its own org and simply
+      // does not exist for the other one.
+      expect(own).toBe(1);
+      expect(other).toBe(0);
+    } finally {
+      await withOrgTx(orgAId, (tx) => tx.tallyOutbox.deleteMany({ where: { externalRef: ref } }));
+    }
+  });
+});

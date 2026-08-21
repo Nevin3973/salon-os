@@ -33,6 +33,12 @@ export async function POST(req: NextRequest) {
 
   // Authenticated after parsing: the connector's key may arrive in the body.
   const ctx = await resolveTallyContext(req, body as Record<string, unknown>);
+  if (ctx === "RATE_LIMITED") {
+    return NextResponse.json(
+      { error: "Too many failed attempts. Try again shortly." },
+      { status: 429 },
+    );
+  }
   if (!ctx) return unauthorized();
 
   const from = parseIstDate(body.from_date);

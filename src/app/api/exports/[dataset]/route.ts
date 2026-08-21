@@ -4,7 +4,7 @@ import { resolveOrgContext, unauthorized, apiError } from "@/server/api/auth";
 import { prisma } from "@/lib/db";
 import { csvResponse, toCsv, csvMoney, type CsvColumn } from "@/lib/csv";
 import { parseRange, ordersCsv, inventoryCsv, auditCsv, movementsCsv, salesCsv, type ReportScope } from "@/lib/reports";
-import { tallyXml, hsnSummary } from "@/lib/tally";
+import { tallyXml, hsnSummary } from "@/lib/tally/xml-export";
 
 /**
  * CSV downloads. Reachable from the console (browser session) and from the

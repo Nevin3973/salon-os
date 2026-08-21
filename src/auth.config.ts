@@ -16,6 +16,24 @@ type AppClaims = {
  * Used directly by middleware; extended with the real provider in `src/auth.ts`
  * for use in Server Actions / Route Handlers (Node runtime).
  */
+/// Endpoints that authenticate themselves with an API key instead of a session.
+/// Every entry must resolve the key and return 401 when it is missing or wrong.
+const MACHINE_ROUTES = new Set([
+  "/api/v1/products",
+  "/api/v1/orders",
+  "/api/tally/vouchers",
+  "/api/tally/ack",
+  "/api/tally/inbound/items",
+  "/api/tally/inbound/purchases",
+]);
+
+/// One dynamic segment, matched narrowly rather than by prefix.
+const ORDER_BY_ID = /^\/api\/v1\/orders\/[^/]+$/;
+
+function isMachineRoute(pathname: string): boolean {
+  return MACHINE_ROUTES.has(pathname) || ORDER_BY_ID.test(pathname);
+}
+
 export const authConfig: NextAuthConfig = {
   // Required on Vercel/behind proxies: trust the platform-provided host header.
   trustHost: true,
@@ -103,13 +121,17 @@ export const authConfig: NextAuthConfig = {
         // unreachable — it redirects to /login, which a machine caller reads as
         // a 307 rather than a refusal. Every route under it verifies the key
         // itself and returns 401 when it is missing or wrong.
-        pathname.startsWith("/api/tally") ||
-        // Same for the v1 REST surface, which has always advertised API-key
-        // access via `Authorization: Bearer vlvt_…`. Without this the session
-        // check ran first and every key-authenticated call was redirected, so
-        // the feature could not work at all. Each route resolves the key and
-        // returns 401 itself.
-        pathname.startsWith("/api/v1") ||
+        // Machine-authenticated endpoints. Callers carry an API key and no
+        // browser session, so the session check here would redirect them to
+        // /login — which a connector reads as a 307, not as an auth failure.
+        //
+        // Listed one by one, NOT by prefix. A prefix match would make every
+        // future route under /api/v1 or /api/tally public the moment someone
+        // adds it, which is exactly backwards for an auth boundary: forgetting
+        // to add a route here fails closed and is noticed immediately, while
+        // forgetting to add auth to a route under a public prefix fails open
+        // and is noticed by whoever finds the data.
+        isMachineRoute(pathname) ||
         pathname.startsWith("/api/auth");
       if (isPublic) return true;
       if (!isLoggedIn) return false;
