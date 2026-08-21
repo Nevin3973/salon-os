@@ -73,7 +73,23 @@ export function getScopedDb(orgId: string) {
         async $allOperations({ model, operation, args, query }) {
           const modelKey = model ? (model.charAt(0).toLowerCase() + model.slice(1)) : "";
           if (!SCOPED_MODELS.includes(modelKey as (typeof SCOPED_MODELS)[number])) {
-            return query(args);
+            // Not org-filtered here, but still re-dispatched with the org
+            // context below.
+            //
+            // The line tables — OrderItem, OrderItemDelivery, SaleItem,
+            // SaleReturnItem — carry no orgId of their own and are scoped
+            // through their parent by their RLS policy. Returning `query(args)`
+            // here ran them with `app.org_id` unset, so the policy matched
+            // nothing and every direct read came back EMPTY rather than
+            // failing. Loading them through an `include` hid it, because the
+            // parent's query already carried the context.
+            return withOrg(orgId, async (tx) => {
+              const delegate = (tx as unknown as Record<string, Record<string, (a: unknown) => Promise<unknown>>>)[modelKey];
+              // Models Prisma exposes but the tenant DB does not (or client
+              // methods reaching this hook) have no delegate to call.
+              if (!delegate?.[operation]) return query(args);
+              return delegate[operation](args);
+            });
           }
 
           // `args` can be undefined entirely (e.g. `findMany()` / `count()`),
