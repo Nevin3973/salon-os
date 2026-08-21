@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { emitSale, emitSaleReturn, emitVoid } from "@/lib/tally/outbox";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { requireVerifiedSession, setOrgConfig, withOrg } from "@/lib/tenant";
@@ -315,6 +316,7 @@ export async function recordSale(input: {
       });
 
       const units = items.reduce((s, it) => s + it.qty, 0);
+      await emitSale(tx, session.orgId, sale.id);
       await logAudit(tx, {
         orgId: session.orgId,
         userId: session.userId,
@@ -397,6 +399,7 @@ export async function voidSale(input: {
         data: { status: "VOID", voidReason: parsed.data.reason },
       });
 
+      await emitVoid(tx, session.orgId, sale.id);
       await logAudit(tx, {
         orgId: session.orgId,
         userId: session.userId,
@@ -580,6 +583,9 @@ export async function returnSaleItems(input: {
       });
 
       const units = returnItems.reduce((s, r) => s + r.qty, 0);
+      // Credit note queued for Tally inside the same transaction: the
+      // event cannot exist without the return, or the return without it.
+      await emitSaleReturn(tx, session.orgId, credit.id);
       await logAudit(tx, {
         orgId: session.orgId,
         userId: session.userId,

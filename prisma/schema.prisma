@@ -65,6 +65,7 @@ model Org {
   saleReturns          SaleReturn[]
   customers            Customer[]
   staff                Staff[]
+  tallyOutbox          TallyOutbox[]
 }
 
 /**
@@ -130,6 +131,7 @@ model Location {
   invoiceSeries        InvoiceSeries[]
   returns              SaleReturn[]
   staff                Staff[]
+  tallyOutbox          TallyOutbox[]
 
   @@index([orgId, type])
 }
@@ -257,6 +259,13 @@ model Product {
   gstRate          Int     @default(0)
   /// HSN code printed on the customer's tax invoice.
   hsn              String?
+  /// Tally's own stable identifier (GUID/MASTERID) for this stock item.
+  ///
+  /// The join key for the integration. Matching on NAME is not viable: item
+  /// names get edited in the normal course of bookkeeping and a name-based
+  /// mapping then breaks silently, with no error and no symptom until the two
+  /// stock figures have already diverged.
+  tallyGuid        String?
 
   /// Sold to walk-in customers. Gates the till and the retail half of branch
   /// inventory, so a back-bar-only product cannot be rung up by mistake.
@@ -279,6 +288,8 @@ model Product {
   @@unique([orgId, sku])
   /// Nullable, so products without a barcode simply don't participate.
   @@unique([orgId, barcode])
+  /// Nullable for the same reason: products Tally doesn't know about yet.
+  @@unique([orgId, tallyGuid])
   @@index([orgId, active, category])
 }
 
@@ -498,6 +509,12 @@ model Sale {
   customerPhone String?
   /// Buyer's GSTIN on a B2B sale, so they can claim input tax credit.
   buyerGstin    String?
+  /// Where this bill was first entered. Retail billing is done in Salon OS, so
+  /// this is normally SALON_OS; the field exists so the outbound feed can skip
+  /// anything that arrived from Tally and avoid echoing it back.
+  origin        TxnOrigin   @default(SALON_OS)
+  /// Tally's voucher reference, when the transaction originated there.
+  tallyRef      String?
   status        SaleStatus  @default(COMPLETED)
   paymentMode   PaymentMode @default(CASH)
   /// Sum of line taxable values AFTER discount (pre-GST), minor units.
@@ -642,6 +659,10 @@ model Order {
   /// accepts a return. Free-form label from OUTSTANDING/REJECTION/RETURN_REASONS.
   closureReason   String?
   closureNote     String?
+  /// Where this order was first entered — see Sale.origin.
+  origin          TxnOrigin          @default(SALON_OS)
+  /// Tally's voucher reference, when the transaction originated there.
+  tallyRef        String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -776,4 +797,62 @@ model AuditLogEntry {
   createdAt  DateTime @default(now())
 
   @@index([orgId, createdAt])
+}
+
+// ————————————————————————————————————————————————————————
+// Tally integration
+// ————————————————————————————————————————————————————————
+
+/// Which system a transaction was first entered in.
+///
+/// The integration principle agreed with the client is "one transaction, one
+/// entry" — staff key it in whichever system suits the task, and it flows to
+/// the other automatically. That only works if each record remembers where it
+/// came from: a transaction that arrived FROM Tally must never be published
+/// back TO Tally, or the two systems echo each other and stock doubles. Every
+/// outbound feed filters on `origin = SALON_OS`.
+enum TxnOrigin {
+  SALON_OS
+  TALLY
+}
+
+/// Append-only queue of accounting events awaiting collection by the Tally
+/// connector.
+///
+/// Deliberately NOT a live query over Sale/Order at request time. The payload
+/// is snapshotted when the event happens, so a later catalogue change cannot
+/// rewrite last month's figures, and a void becomes a new reversal event
+/// rather than a mutation of something already sitting in Tally's books.
+model TallyOutbox {
+  id       String    @id @default(cuid())
+  orgId    String
+  org      Org       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  branchId String?
+  branch   Location? @relation(fields: [branchId], references: [id])
+
+  /// SALE | SALE_RETURN | VOID | ALLOCATION | BRANCH_RETURN | WRITE_OFF
+  eventType String
+  /// The Sale/Order/SaleReturn this event describes, for traceability back.
+  entityId  String
+  /// Stable idempotency key, e.g. "SO-SALE-ROS/25-26/0001". The connector
+  /// passes this to Tally as REMOTEID so a re-delivered event updates the
+  /// voucher instead of creating a duplicate.
+  externalRef String
+
+  /// Tally-shaped snapshot, built at emit time.
+  payload Json
+
+  occurredAt DateTime
+  /// Set when the connector acknowledges the import. Rows still null well
+  /// after `occurredAt` mean the connector has stalled.
+  syncedAt       DateTime?
+  tallyVoucherNo String?
+  attempts       Int       @default(0)
+  lastError      String?
+
+  createdAt DateTime @default(now())
+
+  @@unique([orgId, externalRef])
+  @@index([orgId, occurredAt])
+  @@index([orgId, syncedAt])
 }
