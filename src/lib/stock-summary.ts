@@ -169,3 +169,124 @@ export async function branchStockSummary(
     return [...rows.values()].sort((a, b) => a.name.localeCompare(b.name));
   });
 }
+
+export type WarehouseSummaryRow = {
+  productId: string;
+  sku: string;
+  name: string;
+  unit: string;
+  category: string;
+  opening: number;
+  /// Came back from a salon, including expired lots sent back.
+  receivedBack: number;
+  /// Went out to salons.
+  dispatched: number;
+  /// Disposed of — expired, damaged, recalled.
+  writtenOff: number;
+  /// Stock counts, imports and manual corrections.
+  adjustments: number;
+  closing: number;
+};
+
+/// Warehouse movement categories, matched on the part of `action` before the
+/// " · " detail suffix.
+///
+/// "Import" is deliberately an ADJUSTMENT, not inward. The warehouse import
+/// replaces a product's count rather than receiving against an invoice, so
+/// reporting it as purchases would overstate goods received — sometimes
+/// wildly, since a correction downwards would land as negative inward. True
+/// purchases will populate this report once the Tally inbound sync carries
+/// them across; until then the warehouse has no goods-receipt path at all.
+function warehouseBucket(row: WarehouseSummaryRow, cat: string, delta: number) {
+  switch (cat) {
+    case "Dispatch":
+      row.dispatched += -delta;
+      break;
+    case "Return":
+    case "Expired return":
+      row.receivedBack += delta;
+      break;
+    case "Write-off":
+      row.writtenOff += -delta;
+      break;
+    default:
+      row.adjustments += delta;
+  }
+}
+
+/// Per-product summary for the central warehouse over [from, to).
+///
+/// Same derivation as the branch report and the same reason for it: the ledger
+/// is append-only and carries prevQty and newQty on every row, so a period can
+/// be reconstructed exactly and any figure traced to the movements behind it.
+export async function warehouseStockSummary(
+  orgId: string,
+  from: Date,
+  to: Date,
+): Promise<WarehouseSummaryRow[]> {
+  return withOrg(orgId, async (db) => {
+    const deltas = (await db.$queryRaw(Prisma.sql`
+      SELECT m."productId",
+             split_part(m.action, ' · ', 1) AS cat,
+             SUM(m."newQty" - m."prevQty") AS delta
+        FROM "StockMovement" m
+       WHERE m."createdAt" >= ${from}
+         AND m."createdAt" <  ${to}
+       GROUP BY 1, 2
+    `)) as Array<{ productId: string; cat: string; delta: bigint | number }>;
+
+    const openings = (await db.$queryRaw(Prisma.sql`
+      WITH first_in AS (
+        SELECT DISTINCT ON (m."productId") m."productId", m."prevQty" AS bal
+          FROM "StockMovement" m
+         WHERE m."createdAt" >= ${from} AND m."createdAt" < ${to}
+         ORDER BY m."productId", m."createdAt" ASC, m.id ASC
+      ),
+      last_before AS (
+        SELECT DISTINCT ON (m."productId") m."productId", m."newQty" AS bal
+          FROM "StockMovement" m
+         WHERE m."createdAt" < ${from}
+         ORDER BY m."productId", m."createdAt" DESC, m.id DESC
+      )
+      SELECT COALESCE(f."productId", l."productId") AS "productId",
+             COALESCE(f.bal, l.bal)                AS bal
+        FROM first_in f
+        FULL OUTER JOIN last_before l ON l."productId" = f."productId"
+    `)) as Array<{ productId: string; bal: bigint | number }>;
+
+    const ids = new Set<string>();
+    for (const d of deltas) ids.add(d.productId);
+    for (const o of openings) ids.add(o.productId);
+    if (!ids.size) return [];
+
+    const products = (await db.$queryRaw(Prisma.sql`
+      SELECT id, sku, name, unit, category
+        FROM "Product"
+       WHERE id IN (${Prisma.join([...ids])})
+    `)) as Array<{ id: string; sku: string; name: string; unit: string; category: string }>;
+
+    const rows = new Map<string, WarehouseSummaryRow>();
+    for (const p of products) {
+      rows.set(p.id, {
+        productId: p.id, sku: p.sku, name: p.name, unit: p.unit, category: p.category,
+        opening: 0, receivedBack: 0, dispatched: 0, writtenOff: 0, adjustments: 0, closing: 0,
+      });
+    }
+
+    for (const o of openings) {
+      const row = rows.get(o.productId);
+      if (row) row.opening += n(o.bal);
+    }
+    for (const d of deltas) {
+      const row = rows.get(d.productId);
+      if (row) warehouseBucket(row, d.cat, n(d.delta));
+    }
+
+    for (const row of rows.values()) {
+      row.closing =
+        row.opening + row.receivedBack - row.dispatched - row.writtenOff + row.adjustments;
+    }
+
+    return [...rows.values()].sort((a, b) => a.name.localeCompare(b.name));
+  });
+}
