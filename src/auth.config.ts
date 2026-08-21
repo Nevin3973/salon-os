@@ -98,6 +98,18 @@ export const authConfig: NextAuthConfig = {
         // check and refuses everything when that token is unset, so opening it
         // here does not open it to the world.
         pathname === "/api/backups" ||
+        // The Tally connector runs on the client's LAN with an API key and no
+        // browser session, so a session check here would make the integration
+        // unreachable — it redirects to /login, which a machine caller reads as
+        // a 307 rather than a refusal. Every route under it verifies the key
+        // itself and returns 401 when it is missing or wrong.
+        pathname.startsWith("/api/tally") ||
+        // Same for the v1 REST surface, which has always advertised API-key
+        // access via `Authorization: Bearer vlvt_…`. Without this the session
+        // check ran first and every key-authenticated call was redirected, so
+        // the feature could not work at all. Each route resolves the key and
+        // returns 401 itself.
+        pathname.startsWith("/api/v1") ||
         pathname.startsWith("/api/auth");
       if (isPublic) return true;
       if (!isLoggedIn) return false;
