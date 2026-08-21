@@ -30,6 +30,7 @@ const SCOPED_MODELS = [
   "customer",
   "staff",
   "tallyOutbox",
+  "productBatch",
 ] as const;
 
 /**

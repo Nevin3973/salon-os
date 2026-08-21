@@ -109,6 +109,7 @@ export function StorefrontHeader({
               <Link href="/purchase-manager/account/addresses" className="block px-3 py-2 text-sm hover:bg-velvet-soft rounded">Addresses</Link>
               <Link href="/purchase-manager/orders" className="block px-3 py-2 text-sm hover:bg-velvet-soft rounded">Your orders</Link>
               <Link href="/purchase-manager/returns" className="block px-3 py-2 text-sm hover:bg-velvet-soft rounded">Purchase returns</Link>
+              <Link href="/purchase-manager/expiry" className="block px-3 py-2 text-sm hover:bg-velvet-soft rounded">Expiring stock</Link>
               <Link href="/purchase-manager/stock-summary" className="block px-3 py-2 text-sm hover:bg-velvet-soft rounded">Stock summary</Link>
               <button
                 onClick={() => signOut({ callbackUrl: "/login" })}

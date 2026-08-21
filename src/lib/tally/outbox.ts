@@ -371,3 +371,74 @@ export async function emitBranchReturn(
     occurredAt: now,
   });
 }
+
+/// Stock disposed of — expired, damaged, or otherwise unsellable.
+///
+/// A stock journal in Tally, not a sale: nothing was received for these units,
+/// so the value leaves the books as a loss rather than as revenue. Valued at
+/// the purchase rate, which is what the loss actually cost.
+export async function emitWriteOff(
+  tx: Tx,
+  orgId: string,
+  batchId: string,
+  qty: number,
+  reason: string,
+) {
+  if (qty <= 0) return;
+
+  const batch = await tx.productBatch.findFirst({
+    where: { id: batchId, orgId },
+    include: {
+      product: { select: { name: true, sku: true, hsn: true, gstRate: true, priceCents: true } },
+      branch: { select: { name: true, invoicePrefix: true } },
+    },
+  });
+  if (!batch) return;
+
+  const now = new Date();
+  const value = qty * batch.product.priceCents;
+  const payload = {
+    // The batch and quantity together identify the disposal: writing off part
+    // of a lot twice is a real thing that happens, so the reference cannot be
+    // the batch alone.
+    REF: `SO-WOFF-${batch.id}-${qty}-${now.getTime()}`,
+    TYPE: "WRITE_OFF",
+    TRANSDATE: toTallyDate(now),
+    BATCHNO: batch.batchNo,
+    EXPIRYDATE: toTallyDate(batch.expiryDate),
+    REASON: reason,
+    /// Null branch means the central warehouse.
+    LOCATION: batch.branch
+      ? { CODE: batch.branch.invoicePrefix ?? "", NAME: batch.branch.name }
+      : { CODE: "WH", NAME: "Central warehouse" },
+    STOCKITEM: stockItems([
+      {
+        productId: batch.productId,
+        name: batch.product.name,
+        hsn: batch.product.hsn,
+        gstRate: batch.product.gstRate,
+      },
+    ]),
+    DETAIL: [
+      {
+        STOCKITEMNAME: batch.product.name,
+        PRDCODE: batch.product.sku,
+        HSNCODE: batch.product.hsn ?? "",
+        QTY: qty.toFixed(4),
+        RATE: amt(batch.product.priceCents),
+        NETAMT: amt(value),
+      },
+    ],
+    TOTALS: { NETAMT: amt(value) },
+  };
+
+  await enqueue(tx, {
+    orgId,
+    branchId: batch.branchId,
+    eventType: "WRITE_OFF",
+    entityId: batch.id,
+    externalRef: payload.REF,
+    payload,
+    occurredAt: now,
+  });
+}

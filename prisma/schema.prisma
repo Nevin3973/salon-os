@@ -66,6 +66,7 @@ model Org {
   customers            Customer[]
   staff                Staff[]
   tallyOutbox          TallyOutbox[]
+  productBatches       ProductBatch[]
 }
 
 /**
@@ -132,6 +133,7 @@ model Location {
   returns              SaleReturn[]
   staff                Staff[]
   tallyOutbox          TallyOutbox[]
+  productBatches       ProductBatch[]
 
   @@index([orgId, type])
 }
@@ -284,6 +286,7 @@ model Product {
   branchStockMovements BranchStockMovement[]
   saleItems            SaleItem[]
   returnItems          SaleReturnItem[]
+  batches              ProductBatch[]
 
   @@unique([orgId, sku])
   /// Nullable, so products without a barcode simply don't participate.
@@ -855,4 +858,71 @@ model TallyOutbox {
   @@unique([orgId, externalRef])
   @@index([orgId, occurredAt])
   @@index([orgId, syncedAt])
+}
+
+// ————————————————————————————————————————————————————————
+// Expiry tracking
+// ————————————————————————————————————————————————————————
+
+enum BatchStatus {
+  /// Sellable/usable, sitting wherever `branchId` says.
+  ACTIVE
+  /// Pulled from sale — expired, short-dated or damaged. Still physically
+  /// present and still counted, but must not be sold or used.
+  QUARANTINED
+  /// Disposed of. The stock it represented has already been taken out of the
+  /// ledger; the row is kept so the write-off remains auditable.
+  WRITTEN_OFF
+}
+
+/// A dated lot of one product.
+///
+/// A REGISTER over stock, not a second copy of it. Salon OS has no goods-receipt
+/// path — stock arrives by import or adjustment, and under the agreed split
+/// purchases are keyed in Tally — so batches cannot be the authoritative
+/// quantity without rewriting every stock write to pick a lot. Instead a batch
+/// annotates stock already counted elsewhere: "these N units of this product, at
+/// this location, expire on this date."
+///
+/// The one place a batch moves real stock is a write-off, which goes through the
+/// normal movement ledger and clamps to what is actually on hand. That keeps a
+/// stale batch figure from ever pushing a shelf negative — the failure the
+/// client already has in their Tally data.
+model ProductBatch {
+  id        String  @id @default(cuid())
+  orgId     String
+  org       Org     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  /// Supplier's lot/batch code as printed on the pack.
+  batchNo    String
+  expiryDate DateTime
+  mfgDate    DateTime?
+
+  /// Where these units sit. Null means the central warehouse — branches are
+  /// rows, the warehouse is the absence of one, matching how Location is used
+  /// elsewhere for stock that has not been dispatched.
+  branchId String?
+  branch   Location? @relation(fields: [branchId], references: [id])
+
+  qty    Int         @default(0)
+  status BatchStatus @default(ACTIVE)
+
+  /// Why it was quarantined or written off.
+  reason          String?
+  note            String?
+  createdByUserId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// One row per lot per location. branchId is nullable, and Postgres treats
+  /// NULLs as distinct, so this does not constrain warehouse rows — those are
+  /// kept unique by the application, which is the same trade-off Product makes
+  /// for `barcode`.
+  @@unique([orgId, productId, batchNo, branchId])
+  /// Drives the expiring/expired reports.
+  @@index([orgId, status, expiryDate])
+  @@index([orgId, branchId, status])
 }
