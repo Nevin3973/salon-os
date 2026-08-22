@@ -1,0 +1,89 @@
+name: Deploy to production
+
+# Replaces deploying by hand from a laptop.
+#
+# Every failure on the last manual deploy was environmental rather than a
+# problem with the code: a Docker daemon that kept dying on a full disk, a
+# container with no DNS, bash quoting run through PowerShell, Node refusing to
+# spawn a .cmd, and a command run from the wrong directory. None of those exist
+# on a clean Linux runner, which is the point.
+#
+# Deliberately manual (workflow_dispatch) rather than automatic on push. Nine
+# salons trade on this; a deploy should be a decision someone makes, not a side
+# effect of merging.
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type "deploy" to confirm'
+        required: true
+
+concurrency:
+  # Two overlapping deploys would race on the same :latest tag.
+  group: deploy-production
+  cancel-in-progress: false
+
+env:
+  REGISTRY: registry.digitalocean.com/infynix-salonos
+  IMAGE: salon-os
+  APP_ID: a055938a-e11c-4e28-bb04-e9de6a756d30
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check confirmation
+        if: ${{ github.event.inputs.confirm != 'deploy' }}
+        run: |
+          echo "Confirmation not given — expected the word: deploy"
+          exit 1
+
+      - uses: actions/checkout@v4
+
+      - uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+
+      - name: Log in to the container registry
+        run: doctl registry login --expiry-seconds 1200
+
+      - name: Build image
+        run: |
+          SHA=$(git rev-parse --short HEAD)
+          echo "SHA=$SHA" >> "$GITHUB_ENV"
+          docker build \
+            --build-arg GIT_SHA="$SHA" \
+            --build-arg BUILT_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            -t "$REGISTRY/$IMAGE:$SHA" \
+            -t "$REGISTRY/$IMAGE:latest" .
+
+      - name: Push image
+        # The SHA tag goes first so the commit is recoverable even if the
+        # :latest push fails partway.
+        run: |
+          docker push "$REGISTRY/$IMAGE:$SHA"
+          docker push "$REGISTRY/$IMAGE:latest"
+
+      - name: Trigger deployment
+        # Migrations run inside App Platform as a PRE_DEPLOY job, not from here.
+        # The database firewall admits the app and nothing else; a GitHub runner
+        # has a different address on every run, so allow-listing CI would mean
+        # opening the database far wider than it is now.
+        run: doctl apps create-deployment "$APP_ID" --wait --format ID,Phase
+
+      - name: Verify the deployed commit
+        run: |
+          for i in $(seq 1 30); do
+            LIVE=$(curl -fsS --max-time 20 https://beyonddemands.in/api/health \
+                   | grep -o '"commit":"[^"]*"' | head -1 | cut -d'"' -f4)
+            echo "attempt $i: live=$LIVE expected=$SHA"
+            if [ "$LIVE" = "$SHA" ]; then
+              echo "Deployed."
+              curl -fsS --max-time 20 https://beyonddemands.in/api/health
+              exit 0
+            fi
+            sleep 20
+          done
+          echo "The expected commit never went live. Check the App Platform logs."
+          exit 1

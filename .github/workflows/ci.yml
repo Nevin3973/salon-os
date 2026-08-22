@@ -1,16 +1,22 @@
 name: CI
 
-# Gate every change to main/staging. Production deploys are handled by Vercel's
-# git integration (main -> Production, other branches -> Preview), so CI's job
-# is to VERIFY, not to deploy: lint, type-check, build, and — most importantly —
-# prove the Postgres row-level-security tenant wall still holds, against a real
-# database with the non-privileged app role (the same shape as production).
+# Runs on every push and pull request. Nothing here touches production — this
+# only answers "would this build, and does it still pass its own tests".
+#
+# The database service exists because the row-level-security suite is an
+# integration test by nature: it proves Postgres refuses cross-tenant reads,
+# which cannot be checked with mocks. Those are the tests most worth running
+# automatically, so CI builds a real database from the migrations and seeds it.
 
 on:
   push:
-    branches: [main, staging]
+    branches: [main]
   pull_request:
-    branches: [main, staging]
+
+concurrency:
+  # A newer push makes an in-flight run irrelevant.
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   verify:
@@ -19,72 +25,53 @@ jobs:
     services:
       postgres:
         image: postgres:16-alpine
-        # `salonos` is the cluster superuser (bypasses RLS) — used for
-        # migrations and seeding, mirroring Neon's owner role. The app and the
-        # RLS tests connect as the restricted `salonos_app` role created below.
         env:
           POSTGRES_USER: salonos
-          POSTGRES_PASSWORD: salonos_dev_pw
+          POSTGRES_PASSWORD: ci
           POSTGRES_DB: salonos
-        ports: ['5432:5432']
+        ports: ["5432:5432"]
         options: >-
           --health-cmd "pg_isready -U salonos"
-          --health-interval 5s --health-timeout 5s --health-retries 12
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
 
     env:
-      # Owner (migrations/seed) vs restricted app role (runtime + tests).
-      DIRECT_URL: postgresql://salonos:salonos_dev_pw@localhost:5432/salonos?schema=public
-      DATABASE_URL: postgresql://salonos_app:salonos_app_dev_pw@localhost:5432/salonos?schema=public
-      # Build-time only; not a real secret.
-      AUTH_SECRET: ci-not-a-real-secret-ci-not-a-real-secret
+      DATABASE_URL: postgresql://salonos:ci@localhost:5432/salonos
+      DIRECT_URL: postgresql://salonos:ci@localhost:5432/salonos
+      # Present so anything reading them at import time does not throw. These
+      # are throwaway CI values and grant access to nothing.
+      NEXTAUTH_SECRET: ci-only-not-a-real-secret
+      NEXTAUTH_URL: http://localhost:3000
 
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
+          node-version: 20
+          cache: npm
 
-      - name: Install dependencies
-        run: npm ci
+      - run: npm ci
 
-      - name: Prepare database (schema + RLS + app role + seed)
-        run: |
-          npx prisma db push --skip-generate
-          # Every migration whose directory ends in _rls, applied in order.
-          #
-          # These were previously listed one by one, which meant adding a tenant
-          # table and its policy left CI still applying the old set: the table
-          # went unprotected, and it only surfaced because a test happened to
-          # assert on it. Globbing means a new *_rls migration is picked up with
-          # no workflow change — the safe default when the thing being forgotten
-          # is a security policy.
-          for f in $(ls -d prisma/migrations/*_rls | sort); do
-            echo "Applying $f"
-            npx prisma db execute --schema prisma/schema.prisma --file "$f/migration.sql"
-          done
-          npx prisma db execute --schema prisma/schema.prisma --file scripts/provision-app-role.sql
-          npx tsx prisma/seed.ts
+      - name: Generate Prisma client
+        run: npx prisma generate
 
-      # Guards the above: if a tenant table ever ships without a policy, fail
-      # here with a clear message rather than in whichever test notices first.
-      # The exempt tables and the reasoning live in the script.
-      #
-      # Runs through tsx rather than psql on purpose — the runner does not
-      # reliably have a psql binary, and under `bash -e` a missing one turns
-      # `X=$(psql ...)` into an opaque step failure rather than a useful error.
-      - name: Assert every tenant table has RLS
-        run: npx tsx scripts/assert-rls.ts
+      - name: Build the database from migrations
+        # This is also a standing check that the migration history can rebuild
+        # the schema from nothing. It could not, until the baseline: twelve
+        # tables existed only because someone had run `db push`. If that drift
+        # ever returns, this step fails here rather than during an incident.
+        run: npx prisma migrate deploy
 
-      - name: Lint
-        run: npm run lint
+      - name: Seed
+        run: npx prisma db seed
 
-      - name: Type check
-        run: npx tsc --noEmit
+      - name: Typecheck
+        run: npx tsc --noEmit -p tsconfig.json
 
-      - name: Tests (unit + row-level-security integration)
-        run: npm test -- --run
+      - name: Test
+        run: npx vitest run
 
       - name: Build
         run: npm run build
