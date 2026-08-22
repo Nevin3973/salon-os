@@ -24,7 +24,10 @@ jobs:
 
     services:
       postgres:
-        image: postgres:16-alpine
+        # Must match production (17). CI running an older Postgres than
+        # production is how a version gap goes unnoticed — exactly the gap that
+        # made every backup unrestorable with the local toolchain.
+        image: postgres:17-alpine
         env:
           POSTGRES_USER: salonos
           POSTGRES_PASSWORD: ci

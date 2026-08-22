@@ -16,6 +16,28 @@
 
 set -euo pipefail
 
+# The client tools must be at least the version of the server the dump came
+# from. A newer server writes an archive format an older pg_restore refuses
+# outright, and the failure surfaces only when you try to restore -- which is
+# the worst possible moment to discover it.
+#
+# This was not hypothetical: production runs Postgres 17, the local container
+# ran 16, and every dump taken was unreadable locally with
+# "unsupported version (1.16) in file header". The backups were fine. The
+# ability to use them was not, and nothing said so until a drill was run.
+require_client_version() {
+  local need="$1" have
+  have="$(pg_restore --version 2>/dev/null | grep -oE '[0-9]+' | head -1)"
+  if [ -z "$have" ] || [ "$have" -lt "$need" ]; then
+    echo "PostgreSQL client tools are v${have:-unknown}; v$need or newer is required." >&2
+    echo "The dump was written by a v$need server and an older pg_restore cannot read it." >&2
+    echo "Either install v$need+ client tools, or run through a matching container:" >&2
+    echo "  docker run --rm -i postgres:$need-alpine pg_restore ... < dump" >&2
+    exit 1
+  fi
+}
+
+
 FILE="${1:-}"
 URL="${RESTORE_URL:-}"
 
@@ -24,12 +46,14 @@ if [ -z "$URL" ] || [ -z "$FILE" ]; then
   echo "RESTORE_URL must be set explicitly — this overwrites the target database." >&2
   exit 1
 fi
+require_client_version 17
+
 if [ ! -f "$FILE" ]; then
   echo "No such dump: $FILE" >&2
   exit 1
 fi
 if ! command -v pg_restore >/dev/null 2>&1; then
-  echo "pg_restore not found. Install the PostgreSQL client tools (v16+)." >&2
+  echo "pg_restore not found. Install the PostgreSQL client tools (v17+)." >&2
   exit 1
 fi
 

@@ -24,7 +24,7 @@ if [ -z "$URL" ]; then
   exit 1
 fi
 if ! command -v pg_dump >/dev/null 2>&1; then
-  echo "pg_dump not found. Install the PostgreSQL client tools (v16+)." >&2
+  echo "pg_dump not found. Install the PostgreSQL client tools (v17+ — production runs 17)." >&2
   exit 1
 fi
 

@@ -80,7 +80,7 @@ image instead — it ships the client tools:
 ```bash
 docker run --rm -i --network "container:salonos-postgres" -v "$(pwd):/work" -w /work \
   -e DIRECT_URL="postgresql://salonos:PASSWORD@localhost:5432/salonos" \
-  postgres:16 bash scripts/backup.sh ./backups
+  postgres:17 bash scripts/backup.sh ./backups
 ```
 
 ### What the drill caught
