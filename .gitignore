@@ -50,3 +50,11 @@ next-env.d.ts
 
 # AI tooling scratch — not part of the product
 .agents/
+
+# Database dumps and SQL scratch, wherever they land. /backups/ is already
+# ignored, but a dump written to the repo root by a one-off command would not
+# be — and a dump is every customer, every phone number and every sale.
+*.dump
+*.sql.gz
+.prod-*.sql
+*.tmp.sql

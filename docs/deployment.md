@@ -3,17 +3,20 @@
 ## How it works
 
 ```
-  push / PR ──▶ CI (GitHub Actions)
+  push / PR ──▶ CI
                  builds the DB from migrations, seeds, typechecks, tests, builds
+                   │
+                   ├──▶ Build release image      (tags it with the commit SHA)
+                   │
+                   └──▶ Render rebuilds STAGING from source, automatically
 
-  manual  ──▶ Deploy (GitHub Actions)
-                 build image ──▶ push to DOCR ──▶ trigger App Platform
-                                                        │
-                                                        ├─ PRE_DEPLOY job:
-                                                        │    prisma migrate deploy
-                                                        └─ then the new version
-                                                           goes live
+  manual    ──▶ Promote to production
+                 retag that SHA as :latest ──▶ App Platform
+                                                    ├─ PRE_DEPLOY: migrate deploy
+                                                    └─ new version goes live
 ```
+
+Environments, and how to set staging up, are in [environments.md](environments.md).
 
 Deploys are **manual** (`workflow_dispatch`), not automatic on merge. Nine salons
 trade on this; releasing should be a decision someone makes, not a side effect of
@@ -30,28 +33,7 @@ An App Platform **pre-deploy job** already runs inside that trust boundary. It
 executes before the new version receives traffic, so the schema is always ready
 before the code that depends on it is live.
 
-Add this to the app spec (`doctl apps spec get <APP_ID>` to fetch, edit, then
-`doctl apps update <APP_ID> --spec spec.yaml`):
-
-```yaml
-jobs:
-  - name: migrate
-    kind: PRE_DEPLOY
-    image:
-      registry_type: DOCR
-      registry: infynix-salonos
-      repository: salon-os
-      tag: latest
-    run_command: npx prisma migrate deploy
-    instance_size_slug: apps-s-1vcpu-0.5gb
-    envs:
-      - key: DIRECT_URL
-        scope: RUN_TIME
-        value: ${salonos-pg-blr.DATABASE_URL}
-      - key: DATABASE_URL
-        scope: RUN_TIME
-        value: ${salonos-pg-blr.DATABASE_URL}
-```
+This is already in `.do/app.yaml`; apply it with `doctl apps update <APP_ID> --spec .do/app.yaml`.
 
 `DIRECT_URL` matters: `prisma.config.ts` reads it first and only falls back to
 `DATABASE_URL`. Setting just `DATABASE_URL` in an environment that has a stale

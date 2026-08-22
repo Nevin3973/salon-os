@@ -1,0 +1,70 @@
+name: Build release image
+
+# Builds and pushes a production-ready image for every commit that passes CI on
+# main, tagged with its short SHA. Nothing is deployed here — this only makes an
+# artifact that "Promote to production" can later ship.
+#
+# Staging is NOT deployed from this image. Render builds staging itself from the
+# same Dockerfile and the same commit, so the two artifacts are equivalent
+# without being byte-identical: same source, same build instructions, possibly
+# different base-layer patch levels.
+#
+# That is a real, if narrow, gap — staging cannot prove the exact bytes
+# production will run. It is accepted deliberately: keeping the artifact
+# identical would mean paying for a registry-pulling host, and the failures this
+# staging environment exists to catch — a broken migration, a missing env var, a
+# route that 500s — are all reproduced faithfully by an equivalent build.
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: build-image
+  cancel-in-progress: true
+
+env:
+  REGISTRY: registry.digitalocean.com/infynix-salonos
+  IMAGE: salon-os
+
+jobs:
+  build:
+    # Never publish an artifact whose tests did not pass.
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.ref }}
+
+      - uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+
+      - run: doctl registry login --expiry-seconds 1200
+
+      - name: Build and push
+        run: |
+          SHA=$(git rev-parse --short HEAD)
+          echo "SHA=$SHA" >> "$GITHUB_ENV"
+          docker build \
+            --build-arg GIT_SHA="$SHA" \
+            --build-arg BUILT_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            -t "$REGISTRY/$IMAGE:$SHA" .
+          # Only the SHA tag. :latest is moved by the promote workflow and by
+          # nothing else, so production never changes as a side effect of a
+          # merge.
+          docker push "$REGISTRY/$IMAGE:$SHA"
+
+      - name: Summary
+        run: |
+          {
+            echo "Built \`$SHA\` and pushed it to the registry."
+            echo ""
+            echo "Staging (Render) deploys this commit from source automatically."
+            echo "Once it looks right there, run **Promote to production** with"
+            echo "sha = \`$SHA\`."
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,86 @@
+# Staging on Render.
+#
+#   Render dashboard → New → Blueprint → point it at this repo.
+#
+# Chosen over a local-only staging because the Tally partner's connector needs a
+# real URL to poll, and over Vercel because Vercel builds its own artifact from
+# source rather than running this Dockerfile — staging that tests a different
+# build than production ships is most of the way to not having staging.
+#
+# WHAT THIS COSTS: nothing on Render's free tier, with one behaviour worth
+# knowing. A free web service SPINS DOWN after ~15 minutes idle and takes
+# roughly 50 seconds to answer the next request. For a partner testing endpoints
+# that is a slow first call, not a failure — but tell them, or they will report
+# it as a timeout.
+#
+# SECRETS ARE NOT IN THIS FILE. Everything sensitive is `sync: false`, which
+# tells Render to prompt for it once in the dashboard and store it encrypted.
+# Nothing secret is ever committed.
+
+services:
+  - type: web
+    name: salon-os-staging
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    region: singapore # closest Render offers to the Bangalore production region
+    branch: main
+
+    healthCheckPath: /api/health
+
+    # Migrations run on start rather than as a separate pre-deploy step, which
+    # Render reserves for paid plans. Safe here only because the free plan runs
+    # a single instance: with several, each would race the others to migrate.
+    # If this service is ever scaled up, move this to a pre-deploy hook.
+    dockerCommand: sh -c "npx prisma migrate deploy && node server.js"
+
+    envVars:
+      # Staging's own database — a free Neon project, NOT the production
+      # cluster. Both are set because prisma.config.ts reads DIRECT_URL first
+      # and only falls back to DATABASE_URL; setting one and leaving the other
+      # stale migrates whatever the stale one points at.
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_URL
+        sync: false
+
+      # Must be freshly generated, never production's. Reusing it would let a
+      # session minted on staging be presented to production.
+      - key: AUTH_SECRET
+        sync: false
+
+      # Render injects the service's own URL, so sign-in redirects go to
+      # staging rather than bouncing users into production.
+      - key: AUTH_URL
+        fromService:
+          type: web
+          name: salon-os-staging
+          envVarKey: RENDER_EXTERNAL_URL
+      - key: APP_URL
+        fromService:
+          type: web
+          name: salon-os-staging
+          envVarKey: RENDER_EXTERNAL_URL
+      - key: AUTH_TRUST_HOST
+        value: "true"
+
+      # Deliberately invalid. A staging environment that can email real
+      # customers eventually emails real customers.
+      - key: EMAIL_FROM
+        value: staging@example.invalid
+
+      - key: NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET
+        sync: false
+
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "8080"
+
+      # RESEND_API_KEY, SENTRY_DSN and the UPSTASH_* pair are deliberately
+      # absent. Each degrades safely when unset — email is skipped, errors are
+      # not reported, rate limiting falls back to in-memory — and none of them
+      # should share production's account. Add them in the dashboard only if a
+      # specific test needs one.

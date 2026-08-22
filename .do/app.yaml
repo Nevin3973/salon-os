@@ -87,6 +87,39 @@ services:
         scope: RUN_AND_BUILD_TIME
         value: ml_default
 
+
+jobs:
+  # Schema changes, applied before the new version takes traffic.
+  #
+  # Runs here rather than from CI because the database firewall admits this app
+  # and nothing else. A GitHub runner has a different address on every run, so
+  # migrating from CI would mean opening the database far wider than it is now,
+  # permanently, to save a few seconds per release.
+  #
+  # PRE_DEPLOY means a failed migration aborts the deploy and the previous
+  # version keeps serving — the schema and the code that needs it can never be
+  # live out of step.
+  - name: migrate
+    kind: PRE_DEPLOY
+    instance_count: 1
+    instance_size_slug: apps-s-1vcpu-0.5gb
+    image:
+      registry_type: DOCR
+      registry: infynix-salonos
+      repository: salon-os
+      tag: latest
+    run_command: npx prisma migrate deploy
+    envs:
+      # prisma.config.ts reads DIRECT_URL first and falls back to DATABASE_URL.
+      # Setting only one leaves the other stale, and the migration then runs
+      # against whatever that stale value points at.
+      - key: DIRECT_URL
+        scope: RUN_TIME
+        value: ${salonos-db.DATABASE_URL}
+      - key: DATABASE_URL
+        scope: RUN_TIME
+        value: ${salonos-db.DATABASE_URL}
+
 databases:
   - name: salonos-db
     engine: PG
