@@ -1,26 +1,29 @@
-name: Deploy to production
+name: Promote to production
 
-# Replaces deploying by hand from a laptop.
+# Promotes an image that is ALREADY RUNNING ON STAGING to production, by
+# retagging it. It does not build anything.
 #
-# Every failure on the last manual deploy was environmental rather than a
-# problem with the code: a Docker daemon that kept dying on a full disk, a
-# container with no DNS, bash quoting run through PowerShell, Node refusing to
-# spawn a .cmd, and a command run from the wrong directory. None of those exist
-# on a clean Linux runner, which is the point.
+# That distinction is the whole value of having a staging environment: production
+# runs the exact bytes staging ran. A workflow that rebuilt from the same commit
+# would produce a different image — different base-layer patches, different
+# transitive dependency resolutions — and whatever staging proved would not
+# strictly apply.
 #
-# Deliberately manual (workflow_dispatch) rather than automatic on push. Nine
-# salons trade on this; a deploy should be a decision someone makes, not a side
-# effect of merging.
+# Manual, and requires naming the commit explicitly. Nine salons trade on this;
+# releasing should be a decision someone makes with a specific build in mind,
+# not a button that ships whatever happens to be newest.
 
 on:
   workflow_dispatch:
     inputs:
+      sha:
+        description: "Short commit SHA to promote (must already be on staging)"
+        required: true
       confirm:
         description: 'Type "deploy" to confirm'
         required: true
 
 concurrency:
-  # Two overlapping deploys would race on the same :latest tag.
   group: deploy-production
   cancel-in-progress: false
 
@@ -30,8 +33,12 @@ env:
   APP_ID: a055938a-e11c-4e28-bb04-e9de6a756d30
 
 jobs:
-  deploy:
+  promote:
     runs-on: ubuntu-latest
+    # Attach a GitHub Environment so required reviewers can gate this. Without
+    # protection rules configured it is a no-op label; with them, production
+    # needs a second person to approve.
+    environment: production
     steps:
       - name: Check confirmation
         if: ${{ github.event.inputs.confirm != 'deploy' }}
@@ -39,47 +46,42 @@ jobs:
           echo "Confirmation not given — expected the word: deploy"
           exit 1
 
-      - uses: actions/checkout@v4
-
       - uses: digitalocean/action-doctl@v2
         with:
           token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
 
-      - name: Log in to the container registry
-        run: doctl registry login --expiry-seconds 1200
+      - run: doctl registry login --expiry-seconds 1200
 
-      - name: Build image
+      - name: Verify the image exists
+        # Fail here, before anything is retagged, rather than deploying a tag
+        # that turns out not to exist.
         run: |
-          SHA=$(git rev-parse --short HEAD)
+          SHA="${{ github.event.inputs.sha }}"
+          if ! docker pull "$REGISTRY/$IMAGE:$SHA"; then
+            echo "No image tagged $SHA. Has it been through staging?"
+            exit 1
+          fi
           echo "SHA=$SHA" >> "$GITHUB_ENV"
-          docker build \
-            --build-arg GIT_SHA="$SHA" \
-            --build-arg BUILT_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            -t "$REGISTRY/$IMAGE:$SHA" \
-            -t "$REGISTRY/$IMAGE:latest" .
 
-      - name: Push image
-        # The SHA tag goes first so the commit is recoverable even if the
-        # :latest push fails partway.
+      - name: Retag as production
         run: |
-          docker push "$REGISTRY/$IMAGE:$SHA"
+          docker tag "$REGISTRY/$IMAGE:$SHA" "$REGISTRY/$IMAGE:latest"
           docker push "$REGISTRY/$IMAGE:latest"
 
-      - name: Trigger deployment
-        # Migrations run inside App Platform as a PRE_DEPLOY job, not from here.
-        # The database firewall admits the app and nothing else; a GitHub runner
-        # has a different address on every run, so allow-listing CI would mean
-        # opening the database far wider than it is now.
+      - name: Deploy
+        # Migrations run as the app's PRE_DEPLOY job, inside DigitalOcean's
+        # network — the database firewall admits the app and nothing else, and a
+        # runner's address changes every run.
         run: doctl apps create-deployment "$APP_ID" --wait --format ID,Phase
 
-      - name: Verify the deployed commit
+      - name: Verify the live commit
         run: |
           for i in $(seq 1 30); do
             LIVE=$(curl -fsS --max-time 20 https://beyonddemands.in/api/health \
                    | grep -o '"commit":"[^"]*"' | head -1 | cut -d'"' -f4)
             echo "attempt $i: live=$LIVE expected=$SHA"
             if [ "$LIVE" = "$SHA" ]; then
-              echo "Deployed."
+              echo "Promoted $SHA to production." >> "$GITHUB_STEP_SUMMARY"
               curl -fsS --max-time 20 https://beyonddemands.in/api/health
               exit 0
             fi

@@ -1,0 +1,133 @@
+# Staging app spec.
+#
+#   doctl apps create --spec .do/staging.app.yaml          (first time)
+#   doctl apps update <STAGING_APP_ID> --spec .do/staging.app.yaml
+#
+# Deliberately close to production in shape and deliberately smaller in cost:
+# same region, same Postgres major version, same image, same health check — one
+# instance instead of two, and the smallest instance size. A staging environment
+# that differs in *architecture* teaches you nothing; one that differs only in
+# capacity teaches you almost everything for a fraction of the money.
+#
+# SECRETS ARE PLACEHOLDERS. Fill them in the DigitalOcean console after the
+# first create, or via `doctl apps update` from a local copy — never commit the
+# real values. Anything marked type: SECRET below is stored encrypted by DO once
+# set, and `doctl apps spec get` returns it redacted.
+
+name: salon-os-staging
+region: blr
+
+alerts:
+  - rule: DEPLOYMENT_FAILED
+
+services:
+  - name: salon-os
+    # One instance. Staging exists to catch "does this work at all", not "does
+    # this hold under nine salons' traffic".
+    instance_count: 1
+    instance_size_slug: apps-s-1vcpu-0.5gb
+    http_port: 8080
+
+    image:
+      registry_type: DOCR
+      registry: infynix-salonos
+      repository: salon-os
+      # A separate tag from production. Sharing :latest would mean every push
+      # intended for staging also became the image production pulls on its next
+      # restart — the failure mode being avoided by having a staging at all.
+      tag: staging
+      deploy_on_push:
+        enabled: true
+
+    health_check:
+      http_path: /api/health
+      initial_delay_seconds: 40
+      period_seconds: 15
+      timeout_seconds: 10
+      failure_threshold: 5
+
+    envs:
+      # Points at the `salonos_staging` database inside the EXISTING cluster,
+      # not a new one. A second cluster would roughly double the database bill
+      # to isolate data that is disposable; a second database in the same
+      # cluster isolates it for nothing. The cluster's firewall already admits
+      # apps, so staging needs no new rule.
+      - key: DATABASE_URL
+        scope: RUN_AND_BUILD_TIME
+        type: SECRET
+        value: REPLACE_WITH_STAGING_DB_URL
+      - key: DIRECT_URL
+        scope: RUN_AND_BUILD_TIME
+        type: SECRET
+        value: REPLACE_WITH_STAGING_DB_URL
+
+      - key: AUTH_SECRET
+        scope: RUN_TIME
+        type: SECRET
+        value: REPLACE_WITH_A_FRESH_SECRET
+      # Must be staging's own URL, not production's — a mismatch here sends
+      # sign-in redirects to production and the login loop is baffling.
+      - key: AUTH_URL
+        scope: RUN_TIME
+        value: REPLACE_WITH_STAGING_URL
+      - key: APP_URL
+        scope: RUN_TIME
+        value: REPLACE_WITH_STAGING_URL
+      - key: AUTH_TRUST_HOST
+        scope: RUN_TIME
+        value: "true"
+
+      # Email goes nowhere by default. A staging environment that can email real
+      # customers is a staging environment that eventually does.
+      - key: EMAIL_FROM
+        scope: RUN_TIME
+        value: staging@example.invalid
+      - key: RESEND_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+        value: REPLACE_OR_LEAVE_UNSET_TO_DISABLE_EMAIL
+
+      - key: NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME
+        scope: RUN_AND_BUILD_TIME
+        value: REPLACE_WITH_CLOUDINARY_CLOUD_NAME
+      - key: NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET
+        scope: RUN_AND_BUILD_TIME
+        value: REPLACE_WITH_CLOUDINARY_UPLOAD_PRESET
+
+      # Its own rate-limit namespace. Sharing production's Upstash would let
+      # staging traffic consume a real salon's request budget.
+      - key: UPSTASH_REDIS_REST_URL
+        scope: RUN_TIME
+        type: SECRET
+        value: REPLACE_OR_LEAVE_UNSET_FOR_IN_MEMORY_LIMITS
+      - key: UPSTASH_REDIS_REST_TOKEN
+        scope: RUN_TIME
+        type: SECRET
+        value: REPLACE_OR_LEAVE_UNSET_FOR_IN_MEMORY_LIMITS
+
+jobs:
+  # Runs before the new version takes traffic, inside DigitalOcean's network —
+  # which is the only place that can reach the database without opening its
+  # firewall to a CI runner whose address changes every run.
+  - name: migrate
+    kind: PRE_DEPLOY
+    instance_size_slug: apps-s-1vcpu-0.5gb
+    image:
+      registry_type: DOCR
+      registry: infynix-salonos
+      repository: salon-os
+      tag: staging
+    run_command: npx prisma migrate deploy
+    envs:
+      # prisma.config.ts reads DIRECT_URL first and only falls back to
+      # DATABASE_URL. Setting one without the other migrates whatever the stale
+      # variable points at — which during setup meant migrating the wrong
+      # database and reporting it as `type "LocationType" already exists`.
+      - key: DIRECT_URL
+        scope: RUN_TIME
+        type: SECRET
+        value: REPLACE_WITH_STAGING_DB_URL
+      - key: DATABASE_URL
+        scope: RUN_TIME
+        type: SECRET
+        value: REPLACE_WITH_STAGING_DB_URL

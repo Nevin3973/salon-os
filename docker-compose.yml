@@ -1,0 +1,40 @@
+# Local development database.
+#
+# Replaces a hand-run `docker run` container. That container was created once,
+# months ago, and nothing recorded what it was — so it silently drifted to
+# Postgres 16 while production moved to 17. The consequence was not academic:
+# every backup taken from production was unreadable locally, and nobody knew
+# until a restore was attempted.
+#
+# Pinned to the same major version as production for that reason. When
+# production upgrades, this changes in the same commit.
+#
+#   docker compose up -d          start
+#   docker compose down           stop, keeping data
+#   docker compose down -v        stop and DELETE the data
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: salonos-postgres
+    environment:
+      POSTGRES_USER: salonos
+      POSTGRES_PASSWORD: salonos_dev_pw
+      POSTGRES_DB: salonos
+    ports:
+      - "5432:5432"
+    volumes:
+      # Named volume, so `docker compose down` does not take the database with
+      # it. Use `down -v` when you actually mean to start over.
+      - salonos-pgdata:/var/lib/postgresql/data
+    # Comes back after a reboot or a Docker Desktop restart. The daemon stopping
+    # unexpectedly has been the single most common interruption in local work.
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U salonos -d salonos"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  salonos-pgdata:

@@ -1,0 +1,62 @@
+name: Deploy to staging
+
+# Runs automatically once CI passes on main. Staging is where a change proves
+# itself, so getting there should need no decision — if it merged, it deploys.
+#
+# Production is a separate, manual workflow that PROMOTES this exact image
+# rather than building its own. Rebuilding for production would mean production
+# runs an artifact staging never tested, which quietly defeats the point of
+# having a staging environment at all.
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: true
+
+env:
+  REGISTRY: registry.digitalocean.com/infynix-salonos
+  IMAGE: salon-os
+
+jobs:
+  deploy:
+    # Never ship a build whose tests did not pass.
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.ref }}
+
+      - uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+
+      - run: doctl registry login --expiry-seconds 1200
+
+      - name: Build and push
+        run: |
+          SHA=$(git rev-parse --short HEAD)
+          echo "SHA=$SHA" >> "$GITHUB_ENV"
+          docker build \
+            --build-arg GIT_SHA="$SHA" \
+            --build-arg BUILT_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            -t "$REGISTRY/$IMAGE:$SHA" \
+            -t "$REGISTRY/$IMAGE:staging" .
+          # The SHA tag is what production promotes later, so it is pushed first
+          # and never overwritten.
+          docker push "$REGISTRY/$IMAGE:$SHA"
+          docker push "$REGISTRY/$IMAGE:staging"
+
+      - name: Summary
+        run: |
+          echo "Pushed \`$SHA\` to staging." >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Staging redeploys itself on push. To promote this build to" >> "$GITHUB_STEP_SUMMARY"
+          echo "production, run the **Promote to production** workflow with" >> "$GITHUB_STEP_SUMMARY"
+          echo "sha = \`$SHA\`." >> "$GITHUB_STEP_SUMMARY"
