@@ -36,9 +36,20 @@ services:
 
     envVars:
       # Staging's own database — a free Neon project, NOT the production
-      # cluster. Both are set because prisma.config.ts reads DIRECT_URL first
-      # and only falls back to DATABASE_URL; setting one and leaving the other
-      # stale migrates whatever the stale one points at.
+      # cluster.
+      #
+      # These are TWO DIFFERENT ROLES and must not be set to the same value:
+      #
+      #   DATABASE_URL -> salonos_app   the app connects as this. It has
+      #                                 NOBYPASSRLS, so every tenant policy
+      #                                 actually applies to it.
+      #   DIRECT_URL   -> neondb_owner  migrations run as this on container
+      #                                 start. They alter tables the app role
+      #                                 does not own, and must read past RLS.
+      #
+      # Pointing DATABASE_URL at the owner is the dangerous mistake: the app
+      # would then carry BYPASSRLS and step over every isolation policy, so a
+      # cross-salon data leak would look perfectly fine in staging.
       - key: DATABASE_URL
         sync: false
       - key: DIRECT_URL

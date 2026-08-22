@@ -4,7 +4,7 @@
 |---|---|---|---|
 | Runs on | your machine | Render (free) | DigitalOcean App Platform |
 | Database | local container | Neon (free) | `salonos-pg-blr` cluster |
-| Postgres | 17 | 17 | 17 |
+| Postgres | 17 | **18** — see below | 17 |
 | Instances | — | 1, sleeps when idle | 2 × 1 GB |
 | Deploys | — | automatically from `main` | manually, promoting a built image |
 | Data | seeded, disposable | seeded, disposable | real |
@@ -22,8 +22,20 @@ restore drill: every production dump was unreadable locally with
 `unsupported version (1.16) in file header`. The backups were sound; the ability
 to use them was not.
 
-Dev, CI and staging now pin production's major version. When production
-upgrades, they change in the same commit.
+Dev and CI now pin production's major version. When production upgrades, they
+change in the same commit.
+
+**Staging is the exception, and knowingly so.** The revived Neon project runs
+Postgres 18 while production runs 17. The baseline migration applies cleanly to
+both, so the schema is identical — but a newer server is more permissive than an
+older one, which means the residual risk runs the wrong way: something could
+pass on staging and fail in production. That is precisely the failure staging
+exists to prevent.
+
+It is accepted for now because staging was needed quickly and the project was
+already there. The fix is a fresh Neon project created on 17 and re-seeded —
+about ten minutes, and worth doing before staging is trusted for anything
+subtle. Until then, treat a staging pass as strong evidence rather than proof.
 
 ## Dev
 
@@ -51,8 +63,9 @@ npx prisma migrate deploy && npx prisma db seed
 
 ### One-time setup
 
-1. **Create a free Neon project** at console.neon.tech, Postgres 17, in the
-   region closest to Singapore. Copy its connection string.
+1. **Create a free Neon project** at console.neon.tech on **Postgres 17**, to
+   match production, in the region closest to Singapore. Copy its connection
+   string — this is the OWNER (`neondb_owner`) URL.
 2. **Create the app role.** Staging must not connect as the database owner —
    owners carry `BYPASSRLS` and step straight over every tenant policy, so a
    bug that would leak across salons in production would appear to work fine in
@@ -62,12 +75,16 @@ npx prisma migrate deploy && npx prisma db seed
    ```
 3. **Render dashboard → New → Blueprint**, point it at this repo. It reads
    `render.yaml` and prompts for the values marked `sync: false`.
-4. **Set the secrets** it asks for: `DATABASE_URL` and `DIRECT_URL` (both the
-   Neon URL, using the app role), a **freshly generated** `AUTH_SECRET`, and the
-   two Cloudinary values.
-5. **Seed it once**, so there is something to look at:
+4. **Set the secrets** it asks for. `DATABASE_URL` and `DIRECT_URL` are
+   **different roles** — `salonos_app` for the app, `neondb_owner` for
+   migrations. Setting both to the owner would give the app `BYPASSRLS` and
+   silently disable every tenant policy. Also a **freshly generated**
+   `AUTH_SECRET` and the two Cloudinary values.
+5. **Seed it once**, so there is something to look at. The seed refuses remote
+   databases unless told otherwise — that guard is what stops someone wiping
+   production, so read the command before running it:
    ```bash
-   DIRECT_URL="<neon-url>" DATABASE_URL="<neon-url>" npx prisma db seed
+   SEED_ALLOW_REMOTE=yes DIRECT_URL="<owner-url>" DATABASE_URL="<owner-url>" npx prisma db seed
    ```
 
 Migrations run on container start, so the schema builds itself on first deploy.
@@ -121,5 +138,6 @@ environments through `migrate deploy`.
 
 **Staging never connects as a database owner.** See step 2 above.
 
-**Test restores against staging, not a laptop** — it runs production's Postgres
-major version, which a workstation may not.
+**Test restores against staging, not a laptop** — a workstation may not run
+production's Postgres major version. Note that staging does not currently either;
+see the version note above.

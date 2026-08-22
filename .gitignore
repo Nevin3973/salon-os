@@ -58,3 +58,9 @@ next-env.d.ts
 *.sql.gz
 .prod-*.sql
 *.tmp.sql
+
+# Scratch credential files. Should never exist, but if one does it must not
+# be committable — `git add -A` does not read intentions.
+.app-pw.tmp
+*.pw.tmp
+*-credentials.tmp
