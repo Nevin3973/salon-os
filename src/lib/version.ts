@@ -21,7 +21,7 @@
 
 /** Bumped by scripts/release.sh. Do not edit by hand — the changelog is
  *  generated alongside it and the two must not drift. */
-export const APP_VERSION = "1.6.0";
+export const APP_VERSION = "1.6.1";
 
 export function appVersion(): {
   version: string;

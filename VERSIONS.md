@@ -2,6 +2,10 @@
 
 Every released build of Salon OS, newest first.
 
+## 1.6.1 — 2026-09-04
+
+Checkout dead end at the authorization step
+
 ## 1.6.0 — 2026-09-04
 
 Warehouse-to-salon tax invoices, split price visibility, auth code fixes
