@@ -17,7 +17,7 @@ export default async function CartPage() {
       orderBy: { createdAt: "asc" },
     }),
     db.address.findMany({
-      where: { locationId: session.locationId ?? undefined, isActive: true },
+      where: { locationId: session.locationId, isActive: true },
       orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }],
     }),
   ]);

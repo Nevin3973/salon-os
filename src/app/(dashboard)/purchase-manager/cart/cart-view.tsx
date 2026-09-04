@@ -77,7 +77,7 @@ export function CartView({
     startTransition(async () => {
       const res = await placeOrder({
         authCode,
-        shipToAddressId: addressId,
+        shipToAddressId: addressId || undefined,
         deliveryNote: deliveryNote.trim() || undefined,
       });
       if (!res.ok) {
@@ -205,11 +205,15 @@ export function CartView({
             </div>
             {addresses.length === 0 ? (
               <div className="text-sm text-muted bg-bg border border-dashed border-line rounded-lg p-4">
-                No delivery address on file yet.{" "}
-                <a href="/purchase-manager/account/addresses" className="text-velvet font-medium hover:underline">
-                  Add one in your account
+                No delivery address on file. The order will be delivered to{" "}
+                <span className="text-ink font-medium">{branchName || "your branch"}</span>.{" "}
+                <a
+                  href="/purchase-manager/account/addresses"
+                  className="text-velvet font-medium hover:underline"
+                >
+                  Add a specific address
                 </a>{" "}
-                to continue.
+                if deliveries go somewhere else.
               </div>
             ) : (
               <div className="space-y-2">
@@ -252,9 +256,8 @@ export function CartView({
             </label>
 
             <button
-              onClick={() => { if (addressId) { setStep("auth"); setError(""); } }}
-              disabled={!addressId}
-              className="w-full mt-4 h-11 rounded-full bg-velvet text-white text-sm font-semibold hover:bg-velvet-dark transition-colors disabled:opacity-50 cursor-pointer btn-press"
+              onClick={() => { setStep("auth"); setError(""); }}
+              className="w-full mt-4 h-11 rounded-full bg-velvet text-white text-sm font-semibold hover:bg-velvet-dark transition-colors cursor-pointer btn-press"
             >
               Continue to authorization
             </button>

@@ -16,7 +16,13 @@ export type PlaceOrderResult =
 
 const placeSchema = z.object({
   authCode: z.string().min(1).max(64),
-  shipToAddressId: z.string().min(1),
+  /**
+   * Optional. A dispatch goes from the warehouse to one of the company's own
+   * salons, and the salon IS the destination — the warehouse knows where its
+   * branches are. Requiring an address-book entry first made the checkout a
+   * dead end for every branch that had never created one.
+   */
+  shipToAddressId: z.string().min(1).optional(),
   deliveryNote: z.string().max(500).optional(),
 });
 
@@ -36,7 +42,7 @@ const placeSchema = z.object({
  */
 export async function placeOrder(input: {
   authCode: string;
-  shipToAddressId: string;
+  shipToAddressId?: string;
   deliveryNote?: string;
 }): Promise<PlaceOrderResult> {
   const parsed = placeSchema.safeParse(input);
@@ -55,18 +61,24 @@ export async function placeOrder(input: {
   if (!session.locationId) return { ok: false, error: "Your account is not assigned to a branch." };
   const branchId = session.locationId;
 
-  // The delivery address must be an active address of this branch.
-  const address = await withOrg(session.orgId, (tx) =>
-    tx.address.findFirst({
-      where: {
-        id: parsed.data.shipToAddressId,
-        orgId: session.orgId,
-        locationId: branchId,
-        isActive: true,
-      },
-    })
-  );
-  if (!address) return { ok: false, error: "Choose a valid delivery address." };
+  // When one is given it must be an active address of THIS branch — a manager
+  // may not divert their branch's stock to another site. When none is given the
+  // order simply ships to the branch, which is the normal case.
+  let address: { id: string } | null = null;
+  if (parsed.data.shipToAddressId) {
+    address = await withOrg(session.orgId, (tx) =>
+      tx.address.findFirst({
+        where: {
+          id: parsed.data.shipToAddressId,
+          orgId: session.orgId,
+          locationId: branchId,
+          isActive: true,
+        },
+        select: { id: true },
+      })
+    );
+    if (!address) return { ok: false, error: "Choose a valid delivery address." };
+  }
 
   const verified = await verifyAuthCode(session, branchId, parsed.data.authCode);
   if (!verified.ok) return { ok: false, error: verified.error };
@@ -108,7 +120,7 @@ export async function placeOrder(input: {
           placedByUserId: session.userId,
           status: "PENDING",
           authCodeId: matchedCodeId,
-          shipToAddressId: address.id,
+          shipToAddressId: address?.id ?? null,
           deliveryNote: parsed.data.deliveryNote || null,
           totalCents,
           mrpTotalCents,
