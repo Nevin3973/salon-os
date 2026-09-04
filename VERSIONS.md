@@ -2,6 +2,21 @@
 
 Every released build of Salon OS, newest first.
 
+## 1.6.0 — 2026-09-04
+
+Warehouse-to-salon tax invoices, split price visibility, auth code fixes
+
+  - Authorization codes: fixed correct codes being rejected. The admin form
+    had no "All branches" option and defaulted to the first branch, so a code
+    worked at one branch only; codes are issued upper case but were compared
+    exactly. Codes can now be issued to a named manager.
+  - Branch consoles value stock at MRP, the warehouse at purchase price. The
+    orders CSV export follows the same boundary.
+  - Each dispatch raises a tax invoice, matching the client's Tally document
+    to the paise. Registered name, GSTIN and address are set in Admin.
+  - Negative stock: a warehouse-manager switch, off by default.
+  - Show/hide toggle on every password field.
+
 ## 1.5.14 — 2026-08-14
 
 Baseline. The version number starts here; everything before this shipped
