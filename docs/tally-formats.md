@@ -47,6 +47,18 @@ till where a cashier could sell a back-bar chemical to a customer.
 Matching is done on a normalised form, because the live file contains
 `SALOON` and `SALON`, `KANPEKI  SALON` with two spaces, and `NAASHI SALOn`.
 
+### Where it lives in the app
+
+- **Import** — Warehouse → Import → *Import from Tally*. Idempotent: the same
+  file imported twice updates the same products rather than duplicating them.
+  Quantity changes are written to the movement log, so the warehouse can still
+  answer where any number came from. Ticking off "set stock to the quantities in
+  the file" brings across names and rates only.
+- **Export** — `GET /api/exports/tally-stock`, the same columns back out, valued
+  at purchase cost. This is the reconciliation loop: after a period of trading,
+  sales have drawn the shelf down here and purchases have built it up there, and
+  the two files can be read side by side.
+
 ### Known gaps
 
 - **No item code and no GUID.** The item *name* is the only key in this export,

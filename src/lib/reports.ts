@@ -144,6 +144,45 @@ export async function ordersCsv(
 }
 
 // ————————————————————————————————————————————————————————
+// Tally stock summary — the same shape this platform imports.
+// ————————————————————————————————————————————————————————
+
+/**
+ * Warehouse stock in Tally's own Stock Summary columns.
+ *
+ * The mirror image of the importer: same group / item / qty / rate / value
+ * shape, so a file taken out of here can be read straight down beside a file
+ * taken out of Tally. That is what makes the two systems reconcilable after a
+ * period of trading — sales draw the shelf down here, purchases build it up
+ * there, and this is where the two figures get compared.
+ *
+ * Valued at purchase cost, because that is the basis Tally's own closing
+ * balance uses. Grouped and ordered exactly as Tally prints it.
+ */
+export async function tallyStockCsv(scope: ReportScope): Promise<string> {
+  const db = getScopedDb(scope.orgId);
+  const products = await db.product.findMany({
+    where: { active: true },
+    orderBy: [{ category: "asc" }, { name: "asc" }],
+  });
+
+  type Row = (typeof products)[number];
+  const columns: CsvColumn<Row>[] = [
+    { header: "group", value: (p) => p.category },
+    { header: "item", value: (p) => p.name },
+    { header: "qty", value: (p) => p.stock },
+    { header: "rate", value: (p) => csvMoney(p.priceCents) },
+    { header: "value", value: (p) => csvMoney(p.priceCents * p.stock) },
+    // Not part of Tally's own layout, but what makes a mismatch actionable:
+    // the reader can see at a glance which side of the business a line is.
+    { header: "channel", value: (p) => (p.sellRetail ? "RETAIL" : "SALON") },
+    { header: "sku", value: (p) => p.sku },
+  ];
+
+  return toCsv(columns, products);
+}
+
+// ————————————————————————————————————————————————————————
 // Inventory — a stock-take snapshot with valuation.
 // ————————————————————————————————————————————————————————
 

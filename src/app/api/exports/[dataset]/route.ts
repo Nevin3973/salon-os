@@ -3,7 +3,7 @@ import type { OrderStatus, Role } from "@prisma/client";
 import { resolveOrgContext, unauthorized, apiError } from "@/server/api/auth";
 import { prisma } from "@/lib/db";
 import { csvResponse, toCsv, csvMoney, type CsvColumn } from "@/lib/csv";
-import { parseRange, ordersCsv, inventoryCsv, auditCsv, movementsCsv, salesCsv, type ReportScope } from "@/lib/reports";
+import { parseRange, ordersCsv, inventoryCsv, auditCsv, movementsCsv, salesCsv, tallyStockCsv, type ReportScope } from "@/lib/reports";
 import { tallyXml, hsnSummary } from "@/lib/tally/xml-export";
 import { priceBasisFor, type PriceBasis } from "@/lib/pricing";
 import { orgSettings } from "@/lib/tenant";
@@ -36,6 +36,8 @@ const ALLOWED: Record<string, Role[]> = {
   sales: ["PURCHASE_MANAGER", "SUPER_ADMIN"],
   inventory: ["WAREHOUSE_MANAGER", "SUPER_ADMIN"],
   movements: ["WAREHOUSE_MANAGER", "SUPER_ADMIN"],
+  /** Warehouse stock in Tally's Stock Summary columns, for reconciliation. */
+  "tally-stock": ["WAREHOUSE_MANAGER", "SUPER_ADMIN"],
   audit: ["SUPER_ADMIN"],
   /** Accounting hand-offs: Tally voucher import and the GSTR-1 HSN table. */
   tally: ["PURCHASE_MANAGER", "SUPER_ADMIN"],
@@ -87,6 +89,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ data
       // platform. An API key is a machine credential with no person behind it,
       // so it never qualifies however it was provisioned.
       return csvResponse("sales", await salesCsv(scope, range, ctx.role === "SUPER_ADMIN"));
+    case "tally-stock":
+      return csvResponse("tally-stock-summary", await tallyStockCsv(scope));
     case "inventory":
       return csvResponse("inventory", await inventoryCsv(scope));
     case "movements":
