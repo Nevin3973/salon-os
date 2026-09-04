@@ -67,3 +67,55 @@ describe("allocateDispatch", () => {
     expect(r.remainingAfter).toBe(10);
   });
 });
+
+describe("allocateDispatch with negative stock enabled", () => {
+  it("sends what the branch asked for even with nothing on the shelf", () => {
+    const [r] = allocateDispatch(
+      [{ itemId: "i1", productId: "p1", requestedQty: 10, deliveredQty: 0, requestedDispatch: 10 }],
+      new Map([["p1", 0]]),
+      true
+    );
+    expect(r.qty).toBe(10);
+    expect(r.remainingAfter).toBe(0);
+  });
+
+  it("still refuses to send more than the line owes", () => {
+    // Negative stock is permission to send early, never to over-send.
+    const [r] = allocateDispatch(
+      [{ itemId: "i1", productId: "p1", requestedQty: 4, deliveredQty: 1, requestedDispatch: 99 }],
+      new Map([["p1", 1000]]),
+      true
+    );
+    expect(r.qty).toBe(3);
+  });
+
+  it("carries the running balance below zero across two lines of one product", () => {
+    const res = allocateDispatch(
+      [
+        { itemId: "i1", productId: "p1", requestedQty: 5, deliveredQty: 0, requestedDispatch: 5 },
+        { itemId: "i2", productId: "p1", requestedQty: 4, deliveredQty: 0, requestedDispatch: 4 },
+      ],
+      new Map([["p1", 2]]),
+      true
+    );
+    expect(res.map((r) => r.qty)).toEqual([5, 4]);
+  });
+
+  it("changes nothing when the switch is off", () => {
+    const [r] = allocateDispatch(
+      [{ itemId: "i1", productId: "p1", requestedQty: 10, deliveredQty: 0, requestedDispatch: 10 }],
+      new Map([["p1", 3]]),
+      false
+    );
+    expect(r.qty).toBe(3);
+    expect(r.remainingAfter).toBe(7);
+  });
+
+  it("defaults to off when no flag is passed", () => {
+    const [r] = allocateDispatch(
+      [{ itemId: "i1", productId: "p1", requestedQty: 10, deliveredQty: 0, requestedDispatch: 10 }],
+      new Map([["p1", 0]])
+    );
+    expect(r.qty).toBe(0);
+  });
+});

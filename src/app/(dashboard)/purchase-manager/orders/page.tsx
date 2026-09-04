@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { requireScopedSession } from "@/lib/tenant";
+import { requireScopedSession, activeOrgSettings } from "@/lib/tenant";
+import { priceBasisFor } from "@/lib/pricing";
 import { orderCode, fmtDate, isVoided } from "@/lib/format";
 import { formatMoney } from "@/lib/money";
 import { StatusChip } from "@/components/status-chip";
@@ -12,6 +13,8 @@ export default async function OrdersPage({
   searchParams: Promise<{ q?: string }>;
 }) {
   const { session, db } = await requireScopedSession("PURCHASE_MANAGER");
+  const { showCostToManager } = await activeOrgSettings();
+  const basis = priceBasisFor(session.role, showCostToManager);
   const { q } = await searchParams;
 
   const orders = await db.order.findMany({
@@ -61,7 +64,7 @@ export default async function OrdersPage({
               >
                 <div className="flex items-center gap-3 flex-wrap">
                   <span className="font-medium">{orderCode(o.orderNo)}</span>
-                  <span className="font-semibold">{formatMoney(o.totalCents)}</span>
+                  <span className="font-semibold">{formatMoney(basis === "COST" ? o.totalCents : o.mrpTotalCents)}</span>
                   <span className="text-xs text-faint">{fmtDate(o.createdAt)}</span>
                   <span className="ml-auto"><StatusChip status={o.status} /></span>
                 </div>

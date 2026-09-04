@@ -33,6 +33,7 @@ export default async function WarehouseLayout({ children }: { children: React.Re
           { label: "Order queue", href: "/warehouse/queue", icon: "queue", badge: queueCount || undefined },
           { label: "Pending supplies", href: "/warehouse/outstanding", icon: "clock", badge: outstandingCount || undefined },
           { label: "Inventory", href: "/warehouse/inventory", icon: "boxes" },
+          { label: "Transfer invoices", href: "/warehouse/invoices", icon: "list" },
           { label: "Returns", href: "/warehouse/returns", icon: "undo" },
           { label: "Expiry", href: "/warehouse/expiry", icon: "undo" },
           { label: "Stock summary", href: "/warehouse/stock-summary", icon: "undo" },

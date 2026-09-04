@@ -1,11 +1,12 @@
-import { requireScopedSession } from "@/lib/tenant";
+import { requireScopedSession, orgSettings } from "@/lib/tenant";
 import { orderCode } from "@/lib/format";
 import { OUTSTANDING_REASONS, REJECTION_REASONS } from "@/lib/constants";
 import { PageHeader, StatGrid } from "@/components/console-ui";
 import { DispatchBoard, type QueueOrder } from "./dispatch-board";
 
 export default async function QueuePage() {
-  const { db } = await requireScopedSession("WAREHOUSE_MANAGER");
+  const { session, db } = await requireScopedSession("WAREHOUSE_MANAGER");
+  const { allowNegativeStock } = await orgSettings(session.orgId);
 
   const orders = await db.order.findMany({
     where: { status: { in: ["PENDING", "PROCESSING"] } },
@@ -85,6 +86,7 @@ export default async function QueuePage() {
         orders={queue}
         reasons={[...OUTSTANDING_REASONS]}
         rejectionReasons={[...REJECTION_REASONS]}
+        allowNegativeStock={allowNegativeStock}
       />
     </div>
   );

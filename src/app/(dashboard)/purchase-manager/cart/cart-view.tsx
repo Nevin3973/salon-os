@@ -13,7 +13,7 @@ type Line = {
   unit: string;
   qty: number;
   note: string;
-  priceCents: number;
+  priceCents: number | null;
   available: number;
   isRequirement: boolean;
 };
@@ -29,10 +29,12 @@ export function CartView({
   lines,
   branchName,
   addresses,
+  priceLabel,
 }: {
   lines: Line[];
   branchName: string | null;
   addresses: CartAddress[];
+  priceLabel: string;
 }) {
   const router = useRouter();
   const [step, setStep] = useState<"cart" | "delivery" | "auth">("cart");
@@ -46,7 +48,10 @@ export function CartView({
 
   const totalUnits = lines.reduce((s, l) => s + l.qty, 0);
   const requirementCount = lines.filter((l) => l.isRequirement).length;
-  const subtotalCents = lines.reduce((s, l) => s + l.priceCents * l.qty, 0);
+  const subtotalCents = lines.reduce((s, l) => s + (l.priceCents ?? 0) * l.qty, 0);
+  // A line with no price must not quietly count as zero in a total the
+  // manager is about to approve — it is called out instead.
+  const unpricedCount = lines.filter((l) => l.priceCents === null).length;
 
   function update(productId: string, qty: number) {
     startTransition(async () => {
@@ -97,9 +102,15 @@ export function CartView({
                   <div className="font-medium text-sm">{l.name}</div>
                   <div className="text-xs text-muted">{l.brand} · per {l.unit}</div>
                   <div className="text-sm mt-1">
-                    <span className="font-semibold">{formatMoney(l.priceCents * l.qty)}</span>
-                    {l.qty > 1 && (
-                      <span className="text-xs text-muted"> ({formatMoney(l.priceCents)} each)</span>
+                    {l.priceCents === null ? (
+                      <span className="text-faint italic text-xs">No {priceLabel.toLowerCase()} set</span>
+                    ) : (
+                      <>
+                        <span className="font-semibold">{formatMoney(l.priceCents * l.qty)}</span>
+                        {l.qty > 1 && (
+                          <span className="text-xs text-muted"> ({formatMoney(l.priceCents)} each)</span>
+                        )}
+                      </>
                     )}
                   </div>
                   {l.isRequirement && (
@@ -169,6 +180,13 @@ export function CartView({
           <span className="font-semibold">Order total</span>
           <span className="text-xl font-semibold">{formatMoney(subtotalCents)}</span>
         </div>
+        <div className="text-xs text-faint mt-1">Valued at {priceLabel.toLowerCase()}</div>
+        {unpricedCount > 0 && (
+          <div className="text-xs text-low mt-1">
+            {unpricedCount} line{unpricedCount > 1 ? "s have" : " has"} no {priceLabel.toLowerCase()} and
+            {unpricedCount > 1 ? " are" : " is"} not counted in this total.
+          </div>
+        )}
         {branchName && <div className="text-xs text-faint mt-3">Ordering for {branchName}</div>}
 
         {step === "cart" && (

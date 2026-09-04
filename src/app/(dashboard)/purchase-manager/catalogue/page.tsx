@@ -1,4 +1,5 @@
-import { requireScopedSession } from "@/lib/tenant";
+import { requireScopedSession, activeOrgSettings } from "@/lib/tenant";
+import { priceBasisFor, displayPriceCents } from "@/lib/pricing";
 import { reservedByProduct, availableOf, stockState } from "@/lib/stock";
 import { ProductCard } from "./product-card";
 import { FilterBar, Pagination, type SortKey } from "./filter-bar";
@@ -12,6 +13,8 @@ export default async function CataloguePage({
 }) {
   const { session, db } = await requireScopedSession("PURCHASE_MANAGER");
   const { q, cat, sort, stock, page: pageParam } = await searchParams;
+  const { showCostToManager } = await activeOrgSettings();
+  const basis = priceBasisFor(session.role, showCostToManager);
 
   const products = await db.product.findMany({
     where: { active: true },
@@ -41,7 +44,7 @@ export default async function CataloguePage({
         category: p.category,
         unit: p.unit,
         imageUrl: p.imageUrl,
-        priceCents: p.priceCents,
+        priceCents: displayPriceCents(p, basis),
         available,
         state: stockState(available, p.minStock),
       };
@@ -51,8 +54,11 @@ export default async function CataloguePage({
 
   const sortKey = (sort as SortKey) ?? "relevance";
   const sorted = [...rows];
-  if (sortKey === "price-asc") sorted.sort((a, b) => a.priceCents - b.priceCents);
-  else if (sortKey === "price-desc") sorted.sort((a, b) => b.priceCents - a.priceCents);
+  const priceOr = (v: number | null, fallback: number) => v ?? fallback;
+  if (sortKey === "price-asc")
+    sorted.sort((a, b) => priceOr(a.priceCents, Infinity) - priceOr(b.priceCents, Infinity));
+  else if (sortKey === "price-desc")
+    sorted.sort((a, b) => priceOr(b.priceCents, -1) - priceOr(a.priceCents, -1));
   else if (sortKey === "name") sorted.sort((a, b) => a.name.localeCompare(b.name));
   else if (sortKey === "stock") sorted.sort((a, b) => b.available - a.available);
 

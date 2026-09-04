@@ -3,6 +3,7 @@ import { formatMoney } from "@/lib/money";
 import { AdjustCell } from "./adjust-cell";
 import { RackCell } from "./rack-cell";
 import { CategoryVisibility } from "./category-visibility";
+import { mrpCents } from "@/lib/pricing";
 
 type Row = {
   id: string;
@@ -10,7 +11,7 @@ type Row = {
   brand: string;
   category: string;
   unit: string;
-  retailPriceCents: number;
+  mrpCents: number;
   onHand: number;
   salonUseQty: number;
   rackId: string | null;
@@ -57,7 +58,7 @@ export default async function SalonInventoryPage() {
     brand: p.brand,
     category: p.category,
     unit: p.unit,
-    retailPriceCents: p.retailPriceCents,
+    mrpCents: mrpCents(p),
     onHand: retailOf.get(p.id) ?? 0,
     salonUseQty: salonUseOf.get(p.id) ?? 0,
     rackId: rackOf.get(p.id) ?? null,
@@ -77,7 +78,7 @@ export default async function SalonInventoryPage() {
   // Value only the sellable pool: salon-use stock is a cost already incurred,
   // not inventory awaiting revenue, so counting it here would overstate what
   // the shelf is worth.
-  const shelfValue = retailRows.reduce((s, r) => s + r.onHand * r.retailPriceCents, 0);
+  const shelfValue = retailRows.reduce((s, r) => s + r.onHand * r.mrpCents, 0);
 
   return (
     <div className="max-w-4xl">
@@ -92,7 +93,7 @@ export default async function SalonInventoryPage() {
         <Stat label="Lines on the shelf" value={String(retailRows.filter((r) => r.onHand > 0).length)} />
         <Stat label="Units for sale" value={String(totalUnits)} />
         <Stat label="Units for salon use" value={String(salonUseUnits)} />
-        <Stat label="Shelf value (retail)" value={formatMoney(shelfValue)} />
+        <Stat label="Shelf value (MRP)" value={formatMoney(shelfValue)} />
       </div>
 
       <Section
@@ -172,7 +173,7 @@ function Table({ rows, kind }: { rows: Row[]; kind: "RETAIL" | "SALON_USE" }) {
             <th className="font-medium px-4 py-3">Product</th>
             <th className="font-medium px-4 py-3">Category</th>
             {retail && <th className="font-medium px-4 py-3">Rack</th>}
-            {retail && <th className="font-medium px-4 py-3 text-right">Retail</th>}
+            {retail && <th className="font-medium px-4 py-3 text-right">MRP</th>}
             <th className="font-medium px-4 py-3 text-right">{retail ? "For sale" : "In use"}</th>
             <th className="font-medium px-4 py-3 text-right">Adjust</th>
           </tr>
@@ -196,8 +197,8 @@ function Table({ rows, kind }: { rows: Row[]; kind: "RETAIL" | "SALON_USE" }) {
                 )}
                 {retail && (
                   <td className="px-4 py-3 text-right tabular-nums">
-                    {r.retailPriceCents > 0 ? (
-                      formatMoney(r.retailPriceCents)
+                    {r.mrpCents > 0 ? (
+                      formatMoney(r.mrpCents)
                     ) : (
                       <span className="text-faint">—</span>
                     )}

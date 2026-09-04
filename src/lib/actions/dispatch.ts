@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { requireVerifiedSession, setOrgConfig } from "@/lib/tenant";
+import { requireVerifiedSession, setOrgConfig, orgSettings } from "@/lib/tenant";
 import { logAudit } from "@/lib/audit";
 import { reportError } from "@/lib/observability";
 import { orderCode, fmtDate } from "@/lib/format";
@@ -13,6 +13,7 @@ import { transferBatchesFEFO } from "@/lib/batch-allocation";
 import { allocateDispatch } from "@/lib/allocation";
 import { bumpBranchStock } from "@/lib/branch-stock";
 import { notifyDispatch, notifyRejected, notifyReturn } from "@/lib/notify";
+import { createTransferInvoice } from "@/lib/transfer-invoice";
 
 export type DispatchResult = { ok: true } | { ok: false; error: string; itemId?: string };
 
@@ -77,6 +78,9 @@ export async function applyDispatch(input: {
   const { orderId, closing, lines } = applySchema.parse(input);
   const session = await requireVerifiedSession("WAREHOUSE_MANAGER");
   const lineMap = new Map(lines.map((l) => [l.orderItemId, l]));
+  // Read from the database, not the client: whether stock may go negative is
+  // the warehouse's own switch and must not be something a request can assert.
+  const { allowNegativeStock } = await orgSettings(session.orgId);
 
   try {
     await prisma.$transaction(async (tx) => {
@@ -109,7 +113,8 @@ export async function applyDispatch(input: {
           deliveredQty: it.deliveredQty,
           requestedDispatch: lineMap.get(it.id)?.dispatch ?? 0,
         })),
-        origStock
+        origStock,
+        allowNegativeStock
       ).map((r) => ({ it: itemById.get(r.itemId)!, q: r.qty, remainingAfter: r.remainingAfter }));
 
       // 2. Closing requires a reason for every line that will remain short.
@@ -183,6 +188,39 @@ export async function applyDispatch(input: {
         }
       }
 
+      // The tax invoice for this drop. Raised inside the same transaction as
+      // the stock movement, so goods can never leave the warehouse without a
+      // document, nor a document be issued for goods that did not move.
+      const warehouse = await tx.location.findFirst({
+        where: { orgId: session.orgId, type: "WAREHOUSE" },
+        select: { id: true, name: true },
+      });
+      let invoiceNo: string | undefined;
+      if (warehouse) {
+        const invoice = await createTransferInvoice(tx, {
+          orgId: session.orgId,
+          orderId: order.id,
+          branchId: order.branchId,
+          warehouseId: warehouse.id,
+          warehouseName: warehouse.name,
+          issuedByUserId: session.userId,
+          lines: alloc
+            .filter((a) => a.q > 0)
+            .map((a) => ({
+              productId: a.it.productId,
+              name: a.it.product.name,
+              hsn: a.it.product.hsn,
+              unit: a.it.product.unit,
+              qty: a.q,
+              // The transfer rate is the purchase-price snapshot taken when the
+              // order was placed, not today's catalogue price.
+              rateCents: a.it.unitPriceCents,
+              gstRate: a.it.product.gstRate,
+            })),
+        });
+        invoiceNo = invoice?.invoiceNo;
+      }
+
       // Queue the allocation for Tally in the same transaction as the stock
       // movement it describes, so neither can exist without the other.
       await emitAllocation(
@@ -190,6 +228,7 @@ export async function applyDispatch(input: {
         session.orgId,
         order.id,
         alloc.filter((a) => a.q > 0).map((a) => ({ productId: a.it.productId, qty: a.q })),
+        invoiceNo,
       );
 
       // 5. Status transition.

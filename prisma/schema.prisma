@@ -24,30 +24,44 @@ datasource db {
 // ————————————————————————————————————————————————————————
 
 model Org {
-  id        String   @id @default(cuid())
-  name      String
-  slug      String   @unique
-  orderSeq  Int      @default(0) // per-org order number counter, bumped atomically in placeOrder
-  saleSeq   Int      @default(0) // per-org customer-invoice counter, bumped atomically in recordSale
-  currency  String   @default("INR") // ISO code used for all money display in this org
+  id                 String   @id @default(cuid())
+  name               String
+  slug               String   @unique
+  orderSeq           Int      @default(0) // per-org order number counter, bumped atomically in placeOrder
+  saleSeq            Int      @default(0) // per-org customer-invoice counter, bumped atomically in recordSale
+  currency           String   @default("INR") // ISO code used for all money display in this org
   /// GST registration number, printed on customer tax invoices.
-  gstin     String?
+  gstin              String?
   /// Registered legal name for the tax-invoice header (falls back to `name`).
-  legalName String?
+  legalName          String?
+  /// Registered address, printed as the seller's address on the warehouse's
+  /// inter-branch tax invoice. One free-text block rather than parsed fields:
+  /// it is reproduced verbatim on a statutory document and never queried.
+  registeredAddress  String?
   /// Whether the till asks who the sale should be credited to. Off for salons
   /// that do not run commission — the prompt is then a field staff must dismiss
   /// on every bill, which is how it ends up answered wrongly.
-  showStaffCredit   Boolean @default(true)
+  showStaffCredit    Boolean  @default(true)
   /// Whether a branch manager may see what stock COST and the margin on it.
   /// Off by default: a manager needs the retail price to sell and to reconcile
   /// a till, and supplier pricing is the owner's commercial position, not the
   /// branch's. The owner always sees both.
-  showCostToManager Boolean @default(false)
+  showCostToManager  Boolean  @default(false)
+  /// Whether the warehouse may dispatch more than it physically holds, taking
+  /// stock negative.
+  ///
+  /// Off by default. A negative balance is normally a counting error, and
+  /// letting one appear silently hides the error instead of surfacing it. It is
+  /// switched on deliberately, by the warehouse manager, for the real case it
+  /// exists to serve: goods that have physically arrived and been sent on to a
+  /// branch before the purchase invoice was entered. The ledger then records
+  /// the negative honestly and it clears when the paperwork catches up.
+  allowNegativeStock Boolean  @default(false)
   /// The salon's own logo, shown beside its name in the console. Cloudinary URL,
   /// uploaded in Admin → Branding. Null is normal: the UI falls back to a
   /// monogram, so a salon that never uploads one still looks finished.
-  logoUrl   String?
-  createdAt DateTime @default(now())
+  logoUrl            String?
+  createdAt          DateTime @default(now())
 
   locations            Location[]
   memberships          Membership[]
@@ -62,6 +76,7 @@ model Org {
   branchStock          BranchStock[]
   branchStockMovements BranchStockMovement[]
   invoiceSeries        InvoiceSeries[]
+  transferInvoices     TransferInvoice[]
   saleReturns          SaleReturn[]
   customers            Customer[]
   staff                Staff[]
@@ -71,11 +86,9 @@ model Org {
 
 /**
  * Outcome of one off-site backup attempt, reported by the nightly job.
- *
  * Deliberately NOT tenant-scoped: a backup covers the whole cluster, not one
  * org, so it carries no orgId and is not in SCOPED_MODELS. Only super-admins
  * ever read it.
- *
  * FAILURES ARE RECORDED, not just successes. A table that only ever gets a row
  * when things go well cannot be told apart from a job that stopped running —
  * which is exactly how four consecutive failed backups went unnoticed.
@@ -130,6 +143,7 @@ model Location {
   branchStockMovements BranchStockMovement[]
   sales                Sale[]
   invoiceSeries        InvoiceSeries[]
+  transferInvoices     TransferInvoice[]
   returns              SaleReturn[]
   staff                Staff[]
   tallyOutbox          TallyOutbox[]
@@ -157,6 +171,73 @@ model InvoiceSeries {
   @@index([orgId])
 }
 
+/// The tax invoice the warehouse raises on a branch when it dispatches goods.
+///
+/// Atmosot's warehouse and its salons are separate places of business under one
+/// LLP, so moving stock between them is a supply that has to be invoiced — the
+/// client's accountant already raises exactly this document in Tally. The rate
+/// is the PURCHASE price, exclusive of GST: the warehouse transfers at what it
+/// paid and the salon then sells at MRP, which is where the branch's margin
+/// comes from.
+///
+/// One invoice per dispatch, not per order: a short order is dispatched in
+/// several drops and each drop physically moves goods, so each needs its own
+/// document. Every figure is snapshotted because an invoice, once issued, is a
+/// statutory record and must never be restated by a later price change.
+model TransferInvoice {
+  id             String   @id @default(cuid())
+  orgId          String
+  org            Org      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  orderId        String
+  order          Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  /// Branch being supplied — the "Buyer" and "Consignee" on the printed form.
+  branchId       String
+  branch         Location @relation(fields: [branchId], references: [id])
+  /// Full document number, e.g. "ATM/26-27/0049".
+  invoiceNo      String
+  fy             String
+  seq            Int
+  issuedByUserId String
+  /// Taxable value, exclusive of GST.
+  subtotalCents  Int      @default(0)
+  /// CGST + SGST. Always an intra-state supply: the warehouse and every branch
+  /// are in Kerala, so IGST cannot arise and is not modelled.
+  taxCents       Int      @default(0)
+  /// Signed adjustment bringing the invoice to a whole rupee.
+  roundOffCents  Int      @default(0)
+  totalCents     Int      @default(0)
+
+  createdAt DateTime @default(now())
+
+  items TransferInvoiceItem[]
+
+  @@unique([orgId, invoiceNo])
+  @@index([orgId, branchId])
+  @@index([orderId])
+}
+
+model TransferInvoiceItem {
+  id           String          @id @default(cuid())
+  invoiceId    String
+  invoice      TransferInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  productId    String
+  product      Product         @relation(fields: [productId], references: [id])
+  /// Snapshots — the printed document must not change when the catalogue does.
+  name         String
+  hsn          String?
+  unit         String
+  qty          Int
+  /// Transfer rate per unit, exclusive of GST.
+  rateCents    Int
+  gstRate      Int
+  taxableCents Int
+  cgstCents    Int
+  sgstCents    Int
+
+  @@index([invoiceId])
+  @@index([productId])
+}
+
 model User {
   id                 String   @id @default(cuid())
   email              String   @unique
@@ -169,6 +250,8 @@ model User {
 
   memberships  Membership[]
   resetTokens  PasswordResetToken[]
+  /// Authorization codes issued to this person specifically.
+  authCodes    AuthorizationCode[]
   /// Their staff record, when they are also someone who can be credited
   /// with a sale. Managers and cashiers have one; a stylist has a Staff row
   /// with no User at all.
@@ -271,10 +354,10 @@ model Product {
 
   /// Sold to walk-in customers. Gates the till and the retail half of branch
   /// inventory, so a back-bar-only product cannot be rung up by mistake.
-  sellRetail       Boolean @default(false)
+  sellRetail Boolean @default(false)
   /// Consumed during services — back bar, consumables, tools, equipment.
   /// Shown in the salon-use half of branch inventory.
-  salonUse         Boolean @default(false)
+  salonUse   Boolean @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -287,6 +370,7 @@ model Product {
   saleItems            SaleItem[]
   returnItems          SaleReturnItem[]
   batches              ProductBatch[]
+  transferInvoiceItems TransferInvoiceItem[]
 
   @@unique([orgId, sku])
   /// Nullable, so products without a barcode simply don't participate.
@@ -658,6 +742,12 @@ model Order {
   /// Order value at the time it was placed (sum of item qty × unit price), in minor units.
   /// Re-computed when a Purchase Manager edits a still-PENDING order.
   totalCents      Int                @default(0)
+  /// The same order valued at MRP, in minor units. Held separately because the
+  /// two sides of the business account for one dispatch differently: the
+  /// warehouse relieves stock at what it PAID, the salon receives it at what it
+  /// will SELL for. Snapshotted for the same reason as `totalCents` — a later
+  /// price revision must not silently restate an order already placed.
+  mrpTotalCents   Int                @default(0)
   /// Why the order ended the way it did — set when the warehouse rejects it or
   /// accepts a return. Free-form label from OUTSTANDING/REJECTION/RETURN_REASONS.
   closureReason   String?
@@ -670,7 +760,8 @@ model Order {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  items OrderItem[]
+  items            OrderItem[]
+  transferInvoices TransferInvoice[]
 
   @@unique([orgId, orderNo])
   @@index([orgId, branchId, status])
@@ -689,8 +780,11 @@ model OrderItem {
   /// Cumulative units sent back to the warehouse and restocked.
   returnedQty    Int     @default(0)
   note           String?
-  /// Price snapshot at order time — catalogue prices may change later.
+  /// Purchase-price snapshot at order time — catalogue prices may change later.
   unitPriceCents Int     @default(0)
+  /// MRP snapshot at order time, GST included. What the branch's console values
+  /// this line at. Zero means the product had no retail price when ordered.
+  mrpCents       Int     @default(0)
 
   outstandingReason String?
   outstandingEta    DateTime?
@@ -742,6 +836,14 @@ model AuthorizationCode {
   orgId           String
   org             Org       @relation(fields: [orgId], references: [id], onDelete: Cascade)
   locationId      String? // null = org-wide code; set = branch-scoped
+  /// The one manager this code belongs to. Null = a shared branch/org code.
+  ///
+  /// A shared code cannot answer "who approved this?" — everyone at the branch
+  /// knows it, so the audit trail names whoever happened to be logged in. A
+  /// personal code is refused for anyone else, which makes the approval on a
+  /// void or a stock adjustment attributable to a person.
+  userId          String?
+  user            User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
   codeHash        String
   label           String? // e.g. last 4 chars for display, "ROSE-****"
   isActive        Boolean   @default(true)
@@ -752,6 +854,7 @@ model AuthorizationCode {
   orders Order[]
 
   @@index([orgId, isActive])
+  @@index([userId])
 }
 
 // Machine-to-machine access for the versioned REST API (integrations,
@@ -834,9 +937,9 @@ model TallyOutbox {
   branch   Location? @relation(fields: [branchId], references: [id])
 
   /// SALE | SALE_RETURN | VOID | ALLOCATION | BRANCH_RETURN | WRITE_OFF
-  eventType String
+  eventType   String
   /// The Sale/Order/SaleReturn this event describes, for traceability back.
-  entityId  String
+  entityId    String
   /// Stable idempotency key, e.g. "SO-SALE-ROS/25-26/0001". The connector
   /// passes this to Tally as REMOTEID so a re-delivered event updates the
   /// voucher instead of creating a duplicate.
@@ -845,7 +948,7 @@ model TallyOutbox {
   /// Tally-shaped snapshot, built at emit time.
   payload Json
 
-  occurredAt DateTime
+  occurredAt     DateTime
   /// Set when the connector acknowledges the import. Rows still null well
   /// after `occurredAt` mean the connector has stalled.
   syncedAt       DateTime?

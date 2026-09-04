@@ -5,6 +5,8 @@ import { prisma } from "@/lib/db";
 import { csvResponse, toCsv, csvMoney, type CsvColumn } from "@/lib/csv";
 import { parseRange, ordersCsv, inventoryCsv, auditCsv, movementsCsv, salesCsv, type ReportScope } from "@/lib/reports";
 import { tallyXml, hsnSummary } from "@/lib/tally/xml-export";
+import { priceBasisFor, type PriceBasis } from "@/lib/pricing";
+import { orgSettings } from "@/lib/tenant";
 
 /**
  * CSV downloads. Reachable from the console (browser session) and from the
@@ -71,9 +73,15 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ data
     branchId: ctx.role === "PURCHASE_MANAGER" ? ctx.locationId : null,
   };
 
+  // Mirrors the console's price boundary. A machine caller (no role) is an
+  // org-wide integration credential and gets cost, the same as the owner.
+  const basis: PriceBasis = ctx.role
+    ? priceBasisFor(ctx.role, (await orgSettings(ctx.orgId)).showCostToManager)
+    : "COST";
+
   switch (dataset) {
     case "orders":
-      return csvResponse("orders", await ordersCsv(scope, range, (status as OrderStatus) || undefined));
+      return csvResponse("orders", await ordersCsv(scope, range, (status as OrderStatus) || undefined, basis));
     case "sales":
       // Only the account owner may take customer names and numbers out of the
       // platform. An API key is a machine credential with no person behind it,

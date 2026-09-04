@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { signOut } from "next-auth/react";
 import { verifyOwnPassword } from "@/lib/actions/account";
 import { WORDMARK } from "@/lib/brand";
+import { PasswordInput } from "@/components/password-input";
 
 /**
  * Idle lock for the counter.
@@ -131,14 +132,14 @@ export function TillLock({
         <p className="text-ink font-semibold">{userName}</p>
 
         <form onSubmit={unlock} className="mt-5">
-          <input
-            type="password"
+          <PasswordInput
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="Your password"
             aria-label="Your password"
             autoFocus
-            className="w-full h-12 bg-surface border border-line rounded-xl px-4 text-center text-base outline-none focus:border-velvet"
+            padClassName="px-11"
+            className="w-full h-12 bg-surface border border-line rounded-xl text-center text-base outline-none focus:border-velvet"
           />
           {error && <p className="text-out text-xs mt-2">{error}</p>}
           <button

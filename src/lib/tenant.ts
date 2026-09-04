@@ -31,6 +31,7 @@ const SCOPED_MODELS = [
   "staff",
   "tallyOutbox",
   "productBatch",
+  "transferInvoice",
 ] as const;
 
 /**
@@ -244,21 +245,33 @@ export async function activeOrgName(): Promise<string> {
  * Falls back to the safe answer when there is no org — credit on, cost hidden —
  * so a missing record can never quietly expose supplier pricing.
  */
-export async function activeOrgSettings(): Promise<{
+export type OrgSettings = {
   showStaffCredit: boolean;
   showCostToManager: boolean;
-}> {
-  const session = await auth();
-  const orgId = session?.activeOrgId;
-  if (!orgId) return { showStaffCredit: true, showCostToManager: false };
+  allowNegativeStock: boolean;
+};
+
+/**
+ * The same switches for a named org, for callers with no session — an API key
+ * export, a scheduled job. Defaults are the safe answer: credit on, cost
+ * hidden, so a missing record can never quietly expose supplier pricing.
+ */
+export async function orgSettings(orgId: string | null | undefined): Promise<OrgSettings> {
+  if (!orgId) return { showStaffCredit: true, showCostToManager: false, allowNegativeStock: false };
   const org = await prisma.org.findUnique({
     where: { id: orgId },
-    select: { showStaffCredit: true, showCostToManager: true },
+    select: { showStaffCredit: true, showCostToManager: true, allowNegativeStock: true },
   });
   return {
     showStaffCredit: org?.showStaffCredit ?? true,
     showCostToManager: org?.showCostToManager ?? false,
+    allowNegativeStock: org?.allowNegativeStock ?? false,
   };
+}
+
+export async function activeOrgSettings(): Promise<OrgSettings> {
+  const session = await auth();
+  return orgSettings(session?.activeOrgId);
 }
 
 export async function activeOrgBranding(): Promise<{ name: string; logoUrl: string | null }> {

@@ -150,6 +150,11 @@ export const authConfig: NextAuthConfig = {
           return false;
         }
       }
+      // Warehouse-to-branch tax invoices. Deliberately outside /warehouse:
+      // the branch named as buyer has to be able to open its own invoice, so
+      // the route is shared and the page itself scopes a manager to their
+      // branch. Counter staff have no business with inter-branch documents.
+      if (pathname.startsWith("/invoices") && auth.activeRole === "SALON_STAFF") return false;
       if (pathname.startsWith("/warehouse") && auth.activeRole !== "WAREHOUSE_MANAGER") return false;
       if (pathname.startsWith("/admin") && auth.activeRole !== "SUPER_ADMIN") return false;
 

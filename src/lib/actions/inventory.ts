@@ -9,6 +9,36 @@ import { orderCode } from "@/lib/format";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
+/**
+ * Turns negative stock on or off for the whole warehouse.
+ *
+ * The warehouse manager's switch, not the owner's: they are the one who counts
+ * the shelves and answers for the balance, so they decide whether the system
+ * may show one below zero.
+ */
+export async function setNegativeStock(input: { allow: boolean }): Promise<ActionResult> {
+  const { allow } = z.object({ allow: z.boolean() }).parse(input);
+  const session = await requireVerifiedSession("WAREHOUSE_MANAGER");
+
+  await prisma.org.update({
+    where: { id: session.orgId },
+    data: { allowNegativeStock: allow },
+  });
+  await logAudit(prisma, {
+    orgId: session.orgId,
+    userId: session.userId,
+    userName: session.name,
+    action: allow
+      ? "Allowed dispatching stock the warehouse does not hold — balances may now go negative"
+      : "Stopped allowing negative stock — dispatch is capped at what is on hand",
+    entityType: "Org",
+    entityId: session.orgId,
+  });
+
+  revalidatePath("/warehouse", "layout");
+  return { ok: true };
+}
+
 /** Manual +/- stock adjustment from the inventory table. */
 export async function adjustStock(input: { productId: string; delta: number }): Promise<ActionResult> {
   const { productId, delta } = z

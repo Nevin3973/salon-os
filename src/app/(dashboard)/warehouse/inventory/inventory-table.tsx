@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { StockState } from "@/lib/stock";
 import { adjustStock, setMinStock } from "@/lib/actions/inventory";
+import { formatMoney } from "@/lib/money";
 
 export type InventoryRow = {
   id: string;
@@ -14,6 +15,8 @@ export type InventoryRow = {
   reserved: number;
   available: number;
   minStock: number;
+  /// What the warehouse paid per unit — the rate a stock valuation runs on.
+  priceCents: number;
   state: StockState;
   active: boolean;
 };
@@ -77,6 +80,8 @@ export function InventoryTable({ rows, activeFilter }: { rows: InventoryRow[]; a
                 <th className="px-4 py-3 font-semibold">SKU</th>
                 <th className="px-4 py-3 font-semibold">Product</th>
                 <th className="px-4 py-3 font-semibold text-right">Stock</th>
+                <th className="px-4 py-3 font-semibold text-right">Rate</th>
+                <th className="px-4 py-3 font-semibold text-right">Value</th>
                 <th className="px-4 py-3 font-semibold text-right">Reserved</th>
                 <th className="px-4 py-3 font-semibold text-right">Available</th>
                 <th className="px-4 py-3 font-semibold text-right">Min</th>
@@ -94,7 +99,20 @@ export function InventoryTable({ rows, activeFilter }: { rows: InventoryRow[]; a
                 >
                   <td className="px-4 py-3 text-xs text-faint tabular-nums font-mono">{r.sku}</td>
                   <td className="px-4 py-3 font-medium">{r.name}</td>
-                  <td className="px-4 py-3 text-right tabular-nums">{r.stock}</td>
+                  <td
+                    className={`px-4 py-3 text-right tabular-nums ${
+                      r.stock < 0 ? "text-out font-semibold" : ""
+                    }`}
+                    title={r.stock < 0 ? "Dispatched before the purchase was booked" : undefined}
+                  >
+                    {r.stock}
+                  </td>
+                  <td className="px-4 py-3 text-right tabular-nums text-muted">
+                    {r.priceCents > 0 ? formatMoney(r.priceCents) : <span className="text-faint">—</span>}
+                  </td>
+                  <td className="px-4 py-3 text-right tabular-nums font-medium">
+                    {r.priceCents > 0 ? formatMoney(r.priceCents * r.stock) : <span className="text-faint">—</span>}
+                  </td>
                   <td className={`px-4 py-3 text-right tabular-nums ${r.reserved > 0 ? "text-copper font-medium" : "text-faint"}`}>
                     {r.reserved}
                   </td>

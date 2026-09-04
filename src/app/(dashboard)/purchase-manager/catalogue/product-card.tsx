@@ -16,7 +16,7 @@ type Product = {
   category: string;
   unit: string;
   imageUrl?: string | null;
-  priceCents: number;
+  priceCents: number | null;
   available: number;
   state: StockState;
 };
@@ -75,8 +75,14 @@ export function ProductCard({ product }: { product: Product }) {
 
       {/* Price */}
       <div className="mt-1.5">
-        <span className="text-lg font-semibold text-ink">{formatMoney(product.priceCents)}</span>
-        <span className="text-xs text-muted"> / {product.unit}</span>
+        {product.priceCents === null ? (
+          <span className="text-sm text-faint italic">Price not set</span>
+        ) : (
+          <>
+            <span className="text-lg font-semibold text-ink">{formatMoney(product.priceCents)}</span>
+            <span className="text-xs text-muted"> / {product.unit}</span>
+          </>
+        )}
       </div>
 
       {/* Availability */}

@@ -1,11 +1,14 @@
 import Link from "next/link";
-import { requireScopedSession, activeLocationName } from "@/lib/tenant";
+import { requireScopedSession, activeLocationName, activeOrgSettings } from "@/lib/tenant";
+import { priceBasisFor, displayPriceCents, priceLabel } from "@/lib/pricing";
 import { reservedByProduct, availableOf } from "@/lib/stock";
 import { CartView, type CartAddress } from "./cart-view";
 
 export default async function CartPage() {
   const { session, db } = await requireScopedSession("PURCHASE_MANAGER");
   const branchName = await activeLocationName();
+  const { showCostToManager } = await activeOrgSettings();
+  const basis = priceBasisFor(session.role, showCostToManager);
 
   const [items, addresses] = await Promise.all([
     db.cartItem.findMany({
@@ -30,7 +33,7 @@ export default async function CartPage() {
       unit: it.product.unit,
       qty: it.qty,
       note: it.note ?? "",
-      priceCents: it.product.priceCents,
+      priceCents: displayPriceCents(it.product, basis),
       available,
       isRequirement: it.qty > available,
     };
@@ -58,5 +61,12 @@ export default async function CartPage() {
     );
   }
 
-  return <CartView lines={lines} branchName={branchName} addresses={addressData} />;
+  return (
+    <CartView
+      lines={lines}
+      branchName={branchName}
+      addresses={addressData}
+      priceLabel={priceLabel(basis)}
+    />
+  );
 }

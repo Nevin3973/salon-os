@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { requireScopedSession } from "@/lib/tenant";
+import { requireScopedSession, activeOrgSettings } from "@/lib/tenant";
+import { priceBasisFor, priceLabel } from "@/lib/pricing";
 import { orderCode, fmtDate, fmtDateTime, isVoided } from "@/lib/format";
 import { formatMoney } from "@/lib/money";
 import { StatusChip } from "@/components/status-chip";
@@ -15,6 +16,11 @@ export default async function OrderDetailPage({
   searchParams: Promise<{ placed?: string }>;
 }) {
   const { session, db } = await requireScopedSession("PURCHASE_MANAGER");
+  const { showCostToManager } = await activeOrgSettings();
+  const basis = priceBasisFor(session.role, showCostToManager);
+  // One helper so the line, the line total and the order total can never
+  // end up quoting two different bases on the same screen.
+  const shown = (costCents: number, mrp: number) => (basis === "COST" ? costCents : mrp);
   const { orderId } = await params;
   const { placed } = await searchParams;
 
@@ -28,6 +34,8 @@ export default async function OrderDetailPage({
         },
       },
       shipToAddress: true,
+      // The tax invoices raised on this branch for the goods actually sent.
+      transferInvoices: { orderBy: { createdAt: "asc" } },
     },
   });
   if (!order) notFound();
@@ -94,7 +102,7 @@ export default async function OrderDetailPage({
             brand: it.product.brand,
             unit: it.product.unit,
             qty: it.requestedQty,
-            unitPriceCents: it.unitPriceCents,
+            unitPriceCents: shown(it.unitPriceCents, it.mrpCents),
           }))}
           addresses={addresses}
           shipToAddressId={order.shipToAddressId}
@@ -141,11 +149,40 @@ export default async function OrderDetailPage({
         </div>
       )}
 
+      {order.transferInvoices.length > 0 && (
+        <div className="bg-surface border border-line rounded-xl p-4 mt-4">
+          <h2 className="text-sm font-semibold mb-1">Tax invoices</h2>
+          <p className="text-xs text-muted mb-3">
+            One per delivery. Check the goods against these when the stock arrives.
+          </p>
+          <ul className="divide-y divide-line-soft">
+            {order.transferInvoices.map((inv) => (
+              <li key={inv.id} className="py-2 flex items-center justify-between gap-3 text-sm">
+                <div>
+                  <Link
+                    href={`/invoices/${inv.id}`}
+                    className="font-medium hover:text-velvet hover:underline"
+                  >
+                    {inv.invoiceNo}
+                  </Link>
+                  <span className="text-xs text-faint ml-2">{fmtDate(inv.createdAt)}</span>
+                </div>
+                <span className="tabular-nums font-semibold">{formatMoney(inv.totalCents)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {/* Progress bar */}
       <div className="bg-surface border border-line rounded-xl p-4 mt-4">
         <div className="flex justify-between items-baseline mb-3 pb-3 border-b border-line">
-          <span className="text-sm font-semibold">Order total</span>
-          <span className="text-lg font-semibold">{formatMoney(order.totalCents)}</span>
+          <span className="text-sm font-semibold">
+            Order total <span className="text-faint font-normal">· {priceLabel(basis).toLowerCase()}</span>
+          </span>
+          <span className="text-lg font-semibold">
+            {formatMoney(shown(order.totalCents, order.mrpTotalCents))}
+          </span>
         </div>
         <div className="flex justify-between text-xs text-muted mb-1.5">
           <span>Delivery progress</span>
@@ -172,8 +209,8 @@ export default async function OrderDetailPage({
                   <div className="text-xs text-muted">{it.product.brand} · per {it.product.unit}</div>
                   {it.note && <div className="text-xs text-faint italic mt-1">“{it.note}”</div>}
                   <div className="text-sm mt-1">
-                    <span className="font-semibold">{formatMoney(it.unitPriceCents * it.requestedQty)}</span>
-                    <span className="text-xs text-muted"> ({formatMoney(it.unitPriceCents)} × {it.requestedQty})</span>
+                    <span className="font-semibold">{formatMoney(shown(it.unitPriceCents, it.mrpCents) * it.requestedQty)}</span>
+                    <span className="text-xs text-muted"> ({formatMoney(shown(it.unitPriceCents, it.mrpCents))} × {it.requestedQty})</span>
                   </div>
                 </div>
                 <div className="text-right text-sm shrink-0">

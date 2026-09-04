@@ -1,7 +1,9 @@
-import { requireScopedSession } from "@/lib/tenant";
+import { requireScopedSession, orgSettings } from "@/lib/tenant";
+import { NegativeStockToggle } from "./negative-stock-toggle";
 import { reservedByProduct, availableOf, stockState } from "@/lib/stock";
 import { ExportButton } from "@/components/console-ui";
 import { InventoryTable, type InventoryRow } from "./inventory-table";
+import { formatMoney } from "@/lib/money";
 
 export default async function InventoryPage({
   searchParams,
@@ -10,6 +12,7 @@ export default async function InventoryPage({
 }) {
   const { session, db } = await requireScopedSession("WAREHOUSE_MANAGER");
   const { filter } = await searchParams;
+  const { allowNegativeStock } = await orgSettings(session.orgId);
 
   const products = await db.product.findMany({ orderBy: [{ category: "asc" }, { name: "asc" }] });
   const reserved = await reservedByProduct(session.orgId);
@@ -25,6 +28,7 @@ export default async function InventoryPage({
       reserved: res,
       available,
       minStock: p.minStock,
+      priceCents: p.priceCents,
       state: stockState(available, p.minStock),
       active: p.active,
     };
@@ -33,9 +37,14 @@ export default async function InventoryPage({
   const totalCount = products.length;
   const lowCount = rows.filter((r) => r.state === "low").length;
   const outCount = rows.filter((r) => r.state === "out").length;
+  // Valued at purchase price, which is the basis Tally's own stock summary
+  // closes on — so the two figures can be compared without conversion.
+  const stockValueCents = products.reduce((s, p) => s + p.priceCents * p.stock, 0);
+  const negativeCount = products.filter((p) => p.stock < 0).length;
 
   if (filter === "low") rows = rows.filter((r) => r.state === "low");
   else if (filter === "out") rows = rows.filter((r) => r.state === "out");
+  else if (filter === "negative") rows = rows.filter((r) => r.stock < 0);
 
   return (
     <div>
@@ -56,6 +65,20 @@ export default async function InventoryPage({
             <span className="text-xs text-faint font-medium uppercase tracking-wider">Products</span>
             <span className="text-sm font-bold text-ink tabular-nums">{totalCount}</span>
           </div>
+          {negativeCount > 0 && (
+            <div className="bg-out-soft border border-out/25 rounded-xl px-4 py-2.5 flex items-center gap-2">
+              <span className="text-xs text-out font-medium uppercase tracking-wider">Negative</span>
+              <span className="text-sm font-bold text-out tabular-nums">{negativeCount}</span>
+            </div>
+          )}
+          <div className="glass-surface rounded-xl px-4 py-2.5 flex items-center gap-2">
+            <span className="text-xs text-faint font-medium uppercase tracking-wider">
+              Stock value
+            </span>
+            <span className="text-sm font-bold text-ink tabular-nums">
+              {formatMoney(stockValueCents)}
+            </span>
+          </div>
           {lowCount > 0 && (
             <div className="bg-low-soft border border-low/25 rounded-xl px-4 py-2.5 flex items-center gap-2 animate-scale-in">
               <span className="w-2 h-2 rounded-full bg-low" />
@@ -70,6 +93,8 @@ export default async function InventoryPage({
           )}
         </div>
       </div>
+      <NegativeStockToggle allowed={allowNegativeStock} />
+
       <InventoryTable rows={rows} activeFilter={filter ?? "all"} />
     </div>
   );

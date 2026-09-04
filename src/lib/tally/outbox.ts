@@ -229,6 +229,13 @@ export async function emitAllocation(
   orgId: string,
   orderId: string,
   dispatched: Array<{ productId: string; qty: number }>,
+  /**
+   * The tax invoice raised for this same dispatch. Carried into the voucher so
+   * the accountant can match our document against Tally's line by line —
+   * without it the two systems hold the same movement under different
+   * references and reconciling them is manual.
+   */
+  invoiceNo?: string,
 ) {
   if (!dispatched.length) return;
 
@@ -270,6 +277,7 @@ export async function emitAllocation(
     TYPE: "ALLOCATION",
     TRANSDATE: toTallyDate(now),
     ORDERNO: orderCode(order.orderNo),
+    INVOICENO: invoiceNo ?? "",
     /// Receiving salon. Whether this is a godown, a cost centre or a separate
     /// company in Tally is the partner's mapping decision.
     TOBRANCH: { CODE: order.branch.invoicePrefix ?? "", NAME: order.branch.name },

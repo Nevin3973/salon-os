@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { requireScopedSession } from "@/lib/tenant";
+import { requireScopedSession, activeOrgSettings } from "@/lib/tenant";
+import { priceBasisFor, displayPriceCents, priceLabel } from "@/lib/pricing";
 import { reservedByProduct, availableOf, stockState } from "@/lib/stock";
 import { formatMoney } from "@/lib/money";
 import { optimizedImage } from "@/lib/cloudinary";
@@ -20,6 +21,8 @@ export default async function ProductDetailPage({
 }) {
   const { session, db } = await requireScopedSession("PURCHASE_MANAGER");
   const { productId } = await params;
+  const { showCostToManager } = await activeOrgSettings();
+  const basis = priceBasisFor(session.role, showCostToManager);
 
   const product = await db.product.findFirst({ where: { id: productId, active: true } });
   if (!product) notFound();
@@ -27,6 +30,7 @@ export default async function ProductDetailPage({
   const reserved = await reservedByProduct(session.orgId);
   const available = availableOf(product.stock, reserved.get(product.id) ?? 0);
   const state = stockState(available, product.minStock);
+  const shownPriceCents = displayPriceCents(product, basis);
 
   const related = (
     await db.product.findMany({
@@ -44,7 +48,7 @@ export default async function ProductDetailPage({
       category: p.category,
       unit: p.unit,
       imageUrl: p.imageUrl,
-      priceCents: p.priceCents,
+      priceCents: displayPriceCents(p, basis),
       available: avail,
       state: stockState(avail, p.minStock),
     };
@@ -93,10 +97,17 @@ export default async function ProductDetailPage({
             <div className="text-xs text-muted mt-1">SKU {product.sku} · sold per {product.unit}</div>
 
             <div className="border-t border-line mt-4 pt-4">
-              <div className="flex items-baseline gap-2">
-                <span className="text-3xl font-semibold">{formatMoney(product.priceCents)}</span>
-                <span className="text-sm text-muted">per {product.unit}</span>
+              <div className="text-[11px] uppercase tracking-[0.12em] text-faint mb-1">
+                {priceLabel(basis)}
               </div>
+              {shownPriceCents === null ? (
+                <div className="text-lg text-faint italic">Price not set</div>
+              ) : (
+                <div className="flex items-baseline gap-2">
+                  <span className="text-3xl font-semibold">{formatMoney(shownPriceCents)}</span>
+                  <span className="text-sm text-muted">per {product.unit}</span>
+                </div>
+              )}
             </div>
 
             <div className="border-t border-line mt-4 pt-4">
@@ -125,7 +136,7 @@ export default async function ProductDetailPage({
 
           {/* Buy box */}
           <div className="lg:sticky lg:top-4 self-start">
-            <BuyPanel productId={product.id} available={available} state={state} unit={product.unit} priceCents={product.priceCents} />
+            <BuyPanel productId={product.id} available={available} state={state} unit={product.unit} priceCents={shownPriceCents} priceLabel={priceLabel(basis)} />
           </div>
         </div>
       </div>

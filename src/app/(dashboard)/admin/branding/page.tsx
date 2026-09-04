@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { PRODUCT_NAME, PRODUCT_TAGLINE } from "@/lib/brand";
 import { LogoPanel } from "./logo-panel";
 import { SettingsPanel } from "./settings-panel";
+import { LegalIdentityForm } from "./legal-identity-form";
 
 /**
  * Where a salon sets its own identity inside the product.
@@ -16,7 +17,15 @@ export default async function AdminBrandingPage() {
   const { session } = await requireScopedSession("SUPER_ADMIN");
   const org = await prisma.org.findUnique({
     where: { id: session.orgId },
-    select: { name: true, logoUrl: true, showStaffCredit: true, showCostToManager: true },
+    select: {
+      name: true,
+      logoUrl: true,
+      showStaffCredit: true,
+      showCostToManager: true,
+      legalName: true,
+      gstin: true,
+      registeredAddress: true,
+    },
   });
 
   return (
@@ -32,6 +41,12 @@ export default async function AdminBrandingPage() {
       <SettingsPanel
         showStaffCredit={org?.showStaffCredit ?? true}
         showCostToManager={org?.showCostToManager ?? false}
+      />
+
+      <LegalIdentityForm
+        legalName={org?.legalName ?? ""}
+        gstin={org?.gstin ?? ""}
+        registeredAddress={org?.registeredAddress ?? ""}
       />
     </div>
   );

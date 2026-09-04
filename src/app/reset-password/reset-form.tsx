@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { resetPassword } from "@/lib/actions/password";
+import { PasswordInput } from "@/components/password-input";
 
 const inputCls =
   "w-full bg-surface border border-line rounded-[10px] px-3.5 h-11 text-sm text-ink focus:border-velvet outline-none transition-colors";
@@ -50,8 +51,7 @@ export function ResetForm({ token }: { token: string }) {
         <span className="block text-[11px] font-medium text-faint mb-2 uppercase tracking-[0.12em]">
           New password
         </span>
-        <input
-          type="password"
+        <PasswordInput
           required
           autoComplete="new-password"
           value={password}
@@ -63,8 +63,7 @@ export function ResetForm({ token }: { token: string }) {
         <span className="block text-[11px] font-medium text-faint mb-2 uppercase tracking-[0.12em]">
           Repeat password
         </span>
-        <input
-          type="password"
+        <PasswordInput
           required
           autoComplete="new-password"
           value={confirm}

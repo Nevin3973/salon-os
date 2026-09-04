@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { changePassword } from "@/lib/actions/account";
+import { PasswordInput } from "@/components/password-input";
 
 const inputCls =
   "w-full bg-bg border border-line rounded-lg px-3.5 h-11 text-sm transition-all hover:border-velvet/30 focus:border-velvet focus:ring-2 focus:ring-velvet/10 outline-none";
@@ -33,8 +34,7 @@ export function PasswordForm() {
     <form onSubmit={submit} className="mt-5 max-w-md space-y-4">
       <label className="block">
         <span className="block text-xs font-semibold text-muted mb-1.5 uppercase tracking-wider">Current password</span>
-        <input
-          type="password"
+        <PasswordInput
           value={form.current}
           onChange={(e) => setForm((f) => ({ ...f, current: e.target.value }))}
           required
@@ -44,8 +44,7 @@ export function PasswordForm() {
       </label>
       <label className="block">
         <span className="block text-xs font-semibold text-muted mb-1.5 uppercase tracking-wider">New password</span>
-        <input
-          type="password"
+        <PasswordInput
           value={form.next}
           onChange={(e) => setForm((f) => ({ ...f, next: e.target.value }))}
           required
@@ -55,8 +54,7 @@ export function PasswordForm() {
       </label>
       <label className="block">
         <span className="block text-xs font-semibold text-muted mb-1.5 uppercase tracking-wider">Confirm new password</span>
-        <input
-          type="password"
+        <PasswordInput
           value={form.confirm}
           onChange={(e) => setForm((f) => ({ ...f, confirm: e.target.value }))}
           required

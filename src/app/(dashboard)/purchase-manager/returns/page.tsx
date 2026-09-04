@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { requireScopedSession } from "@/lib/tenant";
+import { requireScopedSession, activeOrgSettings } from "@/lib/tenant";
+import { priceBasisFor } from "@/lib/pricing";
 import { orderCode, fmtDate } from "@/lib/format";
 import { formatMoney } from "@/lib/money";
 
@@ -12,6 +13,10 @@ import { formatMoney } from "@/lib/money";
 
 export default async function ReturnsPage() {
   const { session, db } = await requireScopedSession("PURCHASE_MANAGER");
+  const { showCostToManager } = await activeOrgSettings();
+  const basis = priceBasisFor(session.role, showCostToManager);
+  const unit = (it: { unitPriceCents: number; mrpCents: number }) =>
+    basis === "COST" ? it.unitPriceCents : it.mrpCents;
   const branchId = session.locationId;
 
   const returns = branchId
@@ -30,7 +35,7 @@ export default async function ReturnsPage() {
     : [];
 
   const totalUnits = returns.reduce((s, r) => s + r.qty, 0);
-  const totalValue = returns.reduce((s, r) => s + r.qty * r.orderItem.unitPriceCents, 0);
+  const totalValue = returns.reduce((s, r) => s + r.qty * unit(r.orderItem), 0);
 
   return (
     <div className="max-w-3xl">
@@ -92,7 +97,7 @@ export default async function ReturnsPage() {
                       </td>
                       <td className="py-2 pl-2 text-right tabular-nums">{r.qty}</td>
                       <td className="py-2 pl-2 text-right tabular-nums">
-                        {formatMoney(r.qty * it.unitPriceCents)}
+                        {formatMoney(r.qty * unit(it))}
                       </td>
                     </tr>
                   );

@@ -36,7 +36,7 @@ export default async function InvoicePage({
   if (!sale) notFound();
 
   const [org, seller, address, orgName] = await Promise.all([
-    prisma.org.findUnique({ where: { id: session.orgId }, select: { name: true, legalName: true, gstin: true } }),
+    prisma.org.findUnique({ where: { id: session.orgId }, select: { name: true, legalName: true } }),
     prisma.user.findUnique({ where: { id: sale.soldByUserId }, select: { name: true } }),
     db.address.findFirst({ where: { locationId: sale.branchId, isDefault: true } }),
     activeOrgName(),
@@ -90,7 +90,11 @@ export default async function InvoicePage({
             <div className="font-display text-xl font-bold">{sellerName}</div>
             <div className="text-xs text-muted mt-1">{sale.branch.name}</div>
             {addressLine && <div className="text-xs text-faint mt-0.5 max-w-xs">{addressLine}</div>}
-            {org?.gstin && <div className="text-xs text-faint mt-0.5">GSTIN: {org.gstin}</div>}
+            {/* The seller's GSTIN is deliberately NOT printed on a counter
+                bill. It belongs to the LLP and is shown on the warehouse's
+                inter-branch tax invoice instead, which is where the client
+                wants it. Note that a bill charging GST is normally expected to
+                carry the supplier's GSTIN — see docs/tally-formats.md. */}
           </div>
           <div className="receipt-center text-right">
             <div className="text-[11px] uppercase tracking-[0.18em] text-faint font-semibold">Tax Invoice</div>

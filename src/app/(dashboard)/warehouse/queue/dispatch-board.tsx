@@ -33,10 +33,13 @@ export function DispatchBoard({
   orders,
   reasons,
   rejectionReasons,
+  allowNegativeStock = false,
 }: {
   orders: QueueOrder[];
   reasons: string[];
   rejectionReasons: string[];
+  /** Warehouse switch: lets a line be sent beyond what is on the shelf. */
+  allowNegativeStock?: boolean;
 }) {
   if (orders.length === 0) {
     return (
@@ -54,24 +57,40 @@ export function DispatchBoard({
   return (
     <div className="space-y-4 stagger-children">
       {orders.map((o) => (
-        <OrderCard key={o.id} order={o} reasons={reasons} rejectionReasons={rejectionReasons} />
+        <OrderCard
+          key={o.id}
+          order={o}
+          reasons={reasons}
+          rejectionReasons={rejectionReasons}
+          allowNegativeStock={allowNegativeStock}
+        />
       ))}
     </div>
   );
 }
 
-function lineMax(it: QueueItem) {
-  return Math.min(it.requestedQty - it.deliveredQty, it.stock);
+/**
+ * The most this line may be sent right now.
+ *
+ * Normally the shelf count is the ceiling. With negative stock allowed only
+ * what the line still owes constrains it — the warehouse can supply a branch
+ * ahead of the purchase being booked. It is never more than is owed either way.
+ */
+function lineMax(it: QueueItem, allowNegativeStock: boolean) {
+  const owed = it.requestedQty - it.deliveredQty;
+  return allowNegativeStock ? owed : Math.min(owed, it.stock);
 }
 
 function OrderCard({
   order,
   reasons,
   rejectionReasons,
+  allowNegativeStock,
 }: {
   order: QueueOrder;
   reasons: string[];
   rejectionReasons: string[];
+  allowNegativeStock: boolean;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(order.status === "PROCESSING");
@@ -88,7 +107,12 @@ function OrderCard({
 
   const [draft, setDraft] = useState<Draft>(() => {
     const d: Draft = {};
-    for (const it of order.items) d[it.id] = { dispatch: lineMax(it), reason: "", eta: "", remark: "" };
+    // Pre-filled at what is actually on the shelf even when negative stock is
+    // allowed. Going below zero should be a decision someone makes, not the
+    // number the form happens to open with.
+    for (const it of order.items) {
+      d[it.id] = { dispatch: lineMax(it, false), reason: "", eta: "", remark: "" };
+    }
     return d;
   });
 
@@ -184,10 +208,12 @@ function OrderCard({
         <div className="border-t border-line-soft p-4 sm:p-5 space-y-4 animate-fade-in">
           {order.items.map((it) => {
             const remaining = it.requestedQty - it.deliveredQty;
-            const max = lineMax(it);
+            const max = lineMax(it, allowNegativeStock);
             const line = draft[it.id];
             const shortAfter = remaining - (line?.dispatch ?? 0);
             const stockLimited = it.stock < remaining;
+            // Sending this line now would take the shelf below zero.
+            const goesNegative = allowNegativeStock && (line?.dispatch ?? 0) > it.stock;
             return (
               <div key={it.id} className="border border-line-soft rounded-xl p-4 hover:border-velvet/20 transition-colors">
                 <div className="flex items-start gap-4 flex-wrap">
@@ -255,7 +281,14 @@ function OrderCard({
                           >
                             Max {max}
                           </button>
-                          {stockLimited && <span className="text-[10px] text-low font-medium">stock-limited</span>}
+                          {stockLimited && !allowNegativeStock && (
+                            <span className="text-[10px] text-low font-medium">stock-limited</span>
+                          )}
+                          {goesNegative && (
+                            <span className="text-[10px] text-out font-medium">
+                              takes stock to {it.stock - (line?.dispatch ?? 0)}
+                            </span>
+                          )}
                         </div>
                       </>
                     ) : (

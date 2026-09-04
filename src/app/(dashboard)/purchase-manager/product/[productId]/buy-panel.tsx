@@ -13,12 +13,14 @@ export function BuyPanel({
   state,
   unit,
   priceCents,
+  priceLabel,
 }: {
   productId: string;
   available: number;
   state: StockState;
   unit: string;
-  priceCents: number;
+  priceCents: number | null;
+  priceLabel: string;
 }) {
   const router = useRouter();
   const [qty, setQty] = useState(1);
@@ -40,8 +42,15 @@ export function BuyPanel({
   return (
     <div className="border border-line rounded-md p-4 bg-surface">
       {/* Price */}
-      <div className="text-2xl font-semibold">{formatMoney(priceCents)}</div>
-      <div className="text-xs text-muted mb-3">per {unit}</div>
+      <div className="text-[11px] uppercase tracking-[0.12em] text-faint">{priceLabel}</div>
+      {priceCents === null ? (
+        <div className="text-lg text-faint italic mb-3">Price not set</div>
+      ) : (
+        <>
+          <div className="text-2xl font-semibold">{formatMoney(priceCents)}</div>
+          <div className="text-xs text-muted mb-3">per {unit}</div>
+        </>
+      )}
 
       {/* Availability */}
       <div className="text-lg font-semibold mb-1">
@@ -69,7 +78,7 @@ export function BuyPanel({
         </select>
       </label>
 
-      {qty > 1 && (
+      {qty > 1 && priceCents !== null && (
         <div className="text-sm mb-3 flex justify-between">
           <span className="text-muted">Line total</span>
           <span className="font-semibold">{formatMoney(priceCents * qty)}</span>

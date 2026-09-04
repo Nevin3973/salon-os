@@ -4,6 +4,7 @@ import { reservedByProduct, availableOf, stockState } from "@/lib/stock";
 import { orderCode, statusLabel } from "@/lib/format";
 import { PAYMENT_MODE_LABEL, type PaymentModeValue } from "@/lib/constants";
 import { toCsv, csvMoney, type CsvColumn } from "@/lib/csv";
+import type { PriceBasis } from "@/lib/pricing";
 
 /**
  * Reporting reads. Every query goes through `getScopedDb`, so the org filter
@@ -76,7 +77,14 @@ async function namesFor(orgId: string, userIds: string[]): Promise<Map<string, s
 export async function ordersCsv(
   scope: ReportScope,
   range: ReportRange,
-  status?: OrderStatus
+  status?: OrderStatus,
+  /**
+   * Which price the file is denominated in. A branch manager downloads this to
+   * reconcile deliveries, and the export has to respect the same boundary the
+   * console does — otherwise hiding supplier cost on screen means nothing,
+   * because the CSV hands over the whole price list in one click.
+   */
+  basis: PriceBasis = "COST"
 ): Promise<string> {
   const db = getScopedDb(scope.orgId);
   const orders = await db.order.findMany({
@@ -115,8 +123,14 @@ export async function ordersCsv(
     { header: "Delivered", value: (r) => r.deliveredQty },
     { header: "Returned", value: (r) => r.returnedQty },
     { header: "Outstanding", value: (r) => Math.max(0, r.requestedQty - r.deliveredQty) },
-    { header: "Unit price", value: (r) => csvMoney(r.unitPriceCents) },
-    { header: "Line total", value: (r) => csvMoney(r.unitPriceCents * r.requestedQty) },
+    {
+      header: basis === "COST" ? "Unit price" : "MRP",
+      value: (r) => csvMoney(basis === "COST" ? r.unitPriceCents : r.mrpCents),
+    },
+    {
+      header: "Line total",
+      value: (r) => csvMoney((basis === "COST" ? r.unitPriceCents : r.mrpCents) * r.requestedQty),
+    },
     { header: "Outstanding reason", value: (r) => r.outstandingReason },
     { header: "Expected", value: (r) => r.outstandingEta?.toISOString().slice(0, 10) },
     { header: "Closure reason", value: (r) => r.order.closureReason },

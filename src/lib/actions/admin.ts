@@ -244,6 +244,59 @@ export async function setOrgSettings(input: {
   return { ok: true };
 }
 
+/**
+ * The legal identity printed on the warehouse's inter-branch tax invoice.
+ *
+ * Kept separate from the display name in `branding`: that one is cosmetic, this
+ * one appears on a statutory document. The GSTIN is checked against the
+ * standard 15-character format so a typo is caught here rather than on an
+ * invoice already handed to an accountant.
+ */
+export async function setLegalIdentity(input: {
+  legalName: string;
+  gstin: string;
+  registeredAddress: string;
+}): Promise<AdminResult> {
+  const parsed = z
+    .object({
+      legalName: z.string().trim().max(200),
+      // 2-digit state code, 10-char PAN, entity digit, 'Z', checksum.
+      gstin: z
+        .string()
+        .trim()
+        .toUpperCase()
+        .refine(
+          (v) => v === "" || /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][0-9A-Z]Z[0-9A-Z]$/.test(v),
+          "That does not look like a valid GSTIN."
+        ),
+      registeredAddress: z.string().trim().max(500),
+    })
+    .safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Check the details." };
+  }
+
+  const { session } = await requireVerifiedScopedSession("SUPER_ADMIN");
+  await prisma.org.update({
+    where: { id: session.orgId },
+    data: {
+      legalName: parsed.data.legalName || null,
+      gstin: parsed.data.gstin || null,
+      registeredAddress: parsed.data.registeredAddress || null,
+    },
+  });
+  await logAudit(prisma, {
+    orgId: session.orgId,
+    userId: session.userId,
+    userName: session.name,
+    action: `Updated the registered identity on tax invoices (GSTIN ${parsed.data.gstin || "cleared"})`,
+    entityType: "Org",
+    entityId: session.orgId,
+  });
+  revalidatePath("/", "layout");
+  return { ok: true };
+}
+
 // ————— Branding —————
 
 /**
@@ -532,9 +585,14 @@ export async function createUserWithMembership(input: {
 
 // ————— Authorization codes —————
 
-export async function generateAuthCode(input: { locationId?: string }): Promise<AdminResult<{ code: string }>> {
-  const parsed = z.object({ locationId: z.string().min(1).optional() }).safeParse(input);
-  if (!parsed.success) return { ok: false, error: "Invalid location." };
+export async function generateAuthCode(input: {
+  locationId?: string;
+  userId?: string;
+}): Promise<AdminResult<{ code: string }>> {
+  const parsed = z
+    .object({ locationId: z.string().min(1).optional(), userId: z.string().min(1).optional() })
+    .safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid location or manager." };
   const { session, db } = await requireVerifiedScopedSession("SUPER_ADMIN");
 
   let prefix = "CODE";
@@ -543,12 +601,35 @@ export async function generateAuthCode(input: { locationId?: string }): Promise<
     if (!loc) return { ok: false, error: "Location not found." };
     prefix = loc.name.replace(/[^A-Za-z]/g, "").slice(0, 4).toUpperCase() || "CODE";
   }
-  const raw = `${prefix}-${randomInt(1000, 10000)}`;
+
+  // A personal code is issued against a live membership of THIS org, checked
+  // here rather than trusted from the form — otherwise an admin could bind a
+  // code to a user id belonging to another tenant.
+  let holderName = "";
+  if (parsed.data.userId) {
+    const membership = await prisma.membership.findFirst({
+      where: { orgId: session.orgId, userId: parsed.data.userId },
+      select: { locationId: true, user: { select: { name: true } } },
+    });
+    if (!membership) return { ok: false, error: "That person is not a member of this workspace." };
+    if (
+      parsed.data.locationId &&
+      membership.locationId &&
+      membership.locationId !== parsed.data.locationId
+    ) {
+      return { ok: false, error: "That manager is not assigned to the chosen branch." };
+    }
+    holderName = membership.user.name;
+  }
+
+  // Upper case, always — verification normalises typed input to match.
+  const raw = `${prefix}-${randomInt(1000, 10000)}`.toUpperCase();
 
   await db.authorizationCode.create({
     data: {
       orgId: session.orgId,
       locationId: parsed.data.locationId ?? null,
+      userId: parsed.data.userId ?? null,
       codeHash: await bcrypt.hash(raw, 10),
       label: `${prefix}-••••`,
       createdByUserId: session.userId,
@@ -558,7 +639,9 @@ export async function generateAuthCode(input: { locationId?: string }): Promise<
     orgId: session.orgId,
     userId: session.userId,
     userName: session.name,
-    action: `Generated a new purchase code${parsed.data.locationId ? ` for ${prefix}` : ""}`,
+    action: holderName
+      ? `Issued a personal purchase code to ${holderName}${parsed.data.locationId ? ` at ${prefix}` : ""}`
+      : `Generated a new purchase code${parsed.data.locationId ? ` for ${prefix}` : ""}`,
     entityType: "AuthorizationCode",
   });
 

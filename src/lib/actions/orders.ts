@@ -8,6 +8,7 @@ import { orderCode } from "@/lib/format";
 import { reservedByProduct, availableOf } from "@/lib/stock";
 import { verifyAuthCode } from "@/lib/authcode";
 import { notifyNewOrder, notifyOrderEdited } from "@/lib/notify";
+import { mrpCents } from "@/lib/pricing";
 
 export type PlaceOrderResult =
   | { ok: true; orderId: string; orderNo: number; code: string }
@@ -94,7 +95,10 @@ export async function placeOrder(input: {
       const orderNo = org.orderSeq;
 
       // Snapshot prices at order time — catalogue prices may change later.
+      // Both bases are stored: the warehouse settles this order at cost, the
+      // branch's console shows it at MRP, and neither may drift afterwards.
       const totalCents = cart.reduce((sum, line) => sum + line.product.priceCents * line.qty, 0);
+      const mrpTotalCents = cart.reduce((sum, line) => sum + mrpCents(line.product) * line.qty, 0);
 
       const order = await tx.order.create({
         data: {
@@ -107,11 +111,13 @@ export async function placeOrder(input: {
           shipToAddressId: address.id,
           deliveryNote: parsed.data.deliveryNote || null,
           totalCents,
+          mrpTotalCents,
           items: {
             create: cart.map((line) => ({
               productId: line.productId,
               requestedQty: line.qty,
               unitPriceCents: line.product.priceCents,
+              mrpCents: mrpCents(line.product),
               note: line.note,
             })),
           },
@@ -224,7 +230,7 @@ export async function updateOrder(input: {
 
       const changes: string[] = [];
       // productId → qty on the order after this edit, for the total.
-      const finalLines = new Map<string, { qty: number; unitPriceCents: number }>();
+      const finalLines = new Map<string, { qty: number; unitPriceCents: number; mrpCents: number }>();
 
       for (const item of order.items) {
         const next = qtyById.has(item.id) ? qtyById.get(item.id)! : item.requestedQty;
@@ -237,7 +243,7 @@ export async function updateOrder(input: {
           await tx.orderItem.update({ where: { id: item.id }, data: { requestedQty: next } });
           changes.push(`${item.product.name} ${item.requestedQty} → ${next}`);
         }
-        finalLines.set(item.productId, { qty: next, unitPriceCents: item.unitPriceCents });
+        finalLines.set(item.productId, { qty: next, unitPriceCents: item.unitPriceCents, mrpCents: item.mrpCents });
       }
 
       if (mergeCart) {
@@ -263,10 +269,15 @@ export async function updateOrder(input: {
                 productId: line.productId,
                 requestedQty: line.qty,
                 unitPriceCents: line.product.priceCents,
+                mrpCents: mrpCents(line.product),
                 note: line.note,
               },
             });
-            finalLines.set(line.productId, { qty: line.qty, unitPriceCents: line.product.priceCents });
+            finalLines.set(line.productId, {
+              qty: line.qty,
+              unitPriceCents: line.product.priceCents,
+              mrpCents: mrpCents(line.product),
+            });
             changes.push(`added ${line.qty} × ${line.product.name}`);
           }
         }
@@ -278,6 +289,7 @@ export async function updateOrder(input: {
       if (finalLines.size === 0) throw new Error("EMPTY");
 
       const totalCents = [...finalLines.values()].reduce((s, l) => s + l.unitPriceCents * l.qty, 0);
+      const mrpTotalCents = [...finalLines.values()].reduce((s, l) => s + l.mrpCents * l.qty, 0);
       if (shipToAddressId && shipToAddressId !== order.shipToAddressId) changes.push("delivery address");
       if (deliveryNote !== undefined && (deliveryNote || null) !== order.deliveryNote) {
         changes.push("delivery note");
@@ -288,6 +300,7 @@ export async function updateOrder(input: {
         where: { id: order.id },
         data: {
           totalCents,
+          mrpTotalCents,
           // Re-approved by the code just verified.
           authCodeId: verified.codeId,
           ...(shipToAddressId ? { shipToAddressId } : {}),

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
 import Link from "next/link";
 import { ATTRIBUTION, PRODUCT_NAME, PARENT_NAME, WORDMARK } from "@/lib/brand";
+import { PasswordInput } from "@/components/password-input";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -106,8 +107,7 @@ export default function LoginPage() {
                 <span className="block text-[11px] font-medium text-faint mb-2 uppercase tracking-[0.12em]">
                   Password
                 </span>
-                <input
-                  type="password"
+                <PasswordInput
                   required
                   autoComplete="current-password"
                   value={password}

@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { changePassword } from "@/lib/actions/account";
+import { PasswordInput } from "@/components/password-input";
 
 const inputCls =
   "w-full bg-surface border border-line rounded-[10px] px-3.5 h-11 text-sm text-ink focus:border-velvet outline-none transition-colors";
@@ -37,8 +38,7 @@ export function ForcedPasswordForm() {
         <span className="block text-[11px] font-medium text-faint mb-2 uppercase tracking-[0.12em]">
           One-time password
         </span>
-        <input
-          type="password"
+        <PasswordInput
           required
           autoComplete="current-password"
           value={form.current}
@@ -50,8 +50,7 @@ export function ForcedPasswordForm() {
         <span className="block text-[11px] font-medium text-faint mb-2 uppercase tracking-[0.12em]">
           New password
         </span>
-        <input
-          type="password"
+        <PasswordInput
           required
           autoComplete="new-password"
           value={form.next}
@@ -63,8 +62,7 @@ export function ForcedPasswordForm() {
         <span className="block text-[11px] font-medium text-faint mb-2 uppercase tracking-[0.12em]">
           Repeat new password
         </span>
-        <input
-          type="password"
+        <PasswordInput
           required
           autoComplete="new-password"
           value={form.confirm}
