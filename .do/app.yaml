@@ -108,7 +108,17 @@ jobs:
       registry: infynix-salonos
       repository: salon-os
       tag: latest
-    run_command: npx prisma migrate deploy
+    # Pinned deliberately. Bare `npx prisma` finds no local copy in the
+    # standalone bundle and downloads the NEWEST release from npm — on
+    # 4 Sep 2026 that was Prisma 7, which rejects `url` and `directUrl` in a
+    # schema file, and the deploy failed on someone else's release rather than
+    # on anything in this repository. Keep this version in step with the
+    # `prisma` devDependency in package.json.
+    #
+    # Shipping the CLI in the image instead would be faster and need no
+    # network, but it drags in a dependency tree (effect, @prisma/config and
+    # their own requires) that the standalone bundle deliberately omits.
+    run_command: npx --yes prisma@6.19.3 migrate deploy
     envs:
       # prisma.config.ts reads DIRECT_URL first and falls back to DATABASE_URL.
       # Setting only one leaves the other stale, and the migration then runs
